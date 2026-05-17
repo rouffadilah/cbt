@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBT Pro - Multimedia & Multi-Tipe</title>
+    <style>
+        :root { --primary: #2c3e50; --secondary: #34495e; --bg: #ecf0f1; --accent: #3498db;}
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg); margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: auto; background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: var(--primary); border-bottom: 2px solid var(--accent); padding-bottom: 10px;}
+        .form-group { margin-bottom: 15px; }
+        input[type="text"], input[type="number"], textarea, select { width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 5px; box-sizing: border-box; font-family: inherit;}
+        .soal-card { background: #fff; border: 1px solid #e0e0e0; padding: 20px; margin-bottom: 25px; border-radius: 8px; border-left: 5px solid var(--accent); }
+        .soal-teks { font-size: 16px; margin-bottom: 15px; font-weight: bold;}
+        .media-container { margin: 10px 0; text-align: center; background: #f9f9f9; padding: 10px; border-radius: 5px;}
+        .media-container img, .media-container video { max-width: 100%; max-height: 400px; border-radius: 5px; }
+        .opsi-label { display: flex; align-items: center; margin-bottom: 10px; cursor: pointer; padding: 10px; background: #fdfdfd; border: 1px solid #eee; border-radius: 5px; transition: 0.2s; }
+        .opsi-label:hover { background: #f1f4f6; }
+        .opsi-label input { margin-right: 15px; transform: scale(1.2); }
+        .opsi-media { max-width: 150px; max-height: 100px; margin-left: 10px; border-radius: 4px;}
+        .jodoh-row { display: flex; justify-content: space-between; align-items: center; background: #f9f9f9; padding: 10px; margin-bottom: 8px; border: 1px solid #eee; border-radius: 4px;}
+        .jodoh-row select { width: auto; min-width: 100px; }
+        button { background: var(--accent); color: #fff; border: none; padding: 15px 20px; font-size: 16px; font-weight: bold; border-radius: 5px; cursor: pointer; width: 100%; margin-top: 20px;}
+        button:hover { background: #2980b9; }
+        .badge { display: inline-block; padding: 3px 8px; background: var(--secondary); color: white; border-radius: 3px; font-size: 12px; margin-bottom: 10px;}
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Portal Ujian CBT</h2>
+    
+    <div id="login-section">
+        <div class="form-group">
+            <label>Nama Lengkap Siswa</label>
+            <input type="text" id="nama" required>
+        </div>
+        <div class="form-group">
+            <label>Nomor Induk Siswa (NIS)</label>
+            <input type="number" id="nis" required>
+        </div>
+        <button onclick="mulaiUjian()">Masuk & Mulai Ujian</button>
+    </div>
+
+    <div id="loader" style="display:none; text-align:center; padding: 20px;">Menyiapkan sinkronisasi media dan soal...</div>
+
+    <div id="soal-container" style="display:none;">
+        <form id="form-ujian"></form>
+        <button type="button" onclick="kirimJawaban()" id="btn-submit">Selesai & Kirim Jawaban</button>
+    </div>
+</div>
+
+<script>
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw0I0bp_8D_zcxIA_SMT4WMpUkGVhC5Wo1EPorM72kFqU2N2vNKzZCbFo0us9qCClT7mg/exec';
+
+    // Konversi link gdrive / ekstensi ke tag HTML
+    function parseMedia(url) {
+        if (!url || url.trim() === "") return "";
+        let finalUrl = url.trim();
+        
+        // Konversi otomatis link Google Drive untuk view
+        if(finalUrl.includes('drive.google.com/file/d/')) {
+            const fileId = finalUrl.match(/d\/(.*?)\//)[1];
+            finalUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+            return `<img src="${finalUrl}" class="opsi-media" onerror="this.outerHTML='<audio controls src=\\'${finalUrl}\\'></audio>'">`; 
+            // Trik fallback: coba load sbg gambar, jika gagal (audio/video), ganti ke tag lain
+        }
+
+        const ext = finalUrl.split('.').pop().toLowerCase();
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+            return `<img src="${finalUrl}" class="opsi-media" alt="Gambar">`;
+        } else if (['mp4', 'webm', 'ogg'].includes(ext)) {
+            return `<video controls class="opsi-media"><source src="${finalUrl}"></video>`;
+        } else if (['mp3', 'wav', 'm4a'].includes(ext)) {
+            return `<audio controls style="width:200px;"><source src="${finalUrl}"></audio>`;
+        }
+        return `<a href="${finalUrl}" target="_blank">Lihat Media</a>`; // Fallback
+    }
+
+    function renderOpsiPG(soal, isCheckbox = false) {
+        let html = '';
+        const options = [
+            { huruf: 'A', data: soal.opsiA }, { huruf: 'B', data: soal.opsiB },
+            { huruf: 'C', data: soal.opsiC }, { huruf: 'D', data: soal.opsiD }, { huruf: 'E', data: soal.opsiE }
+        ];
+        let inputType = isCheckbox ? 'checkbox' : 'radio';
+
+        options.forEach(opt => {
+            if(opt.data.teks !== "" || opt.data.media !== "") {
+                html += `
+                <label class="opsi-label">
+                    <input type="${inputType}" name="${soal.id}" value="${opt.huruf}">
+                    <span style="font-weight:bold; margin-right:10px;">${opt.huruf}.</span>
+                    <span>${opt.data.teks}</span>
+                    ${opt.data.media ? parseMedia(opt.data.media) : ''}
+                </label>`;
+            }
+        });
+        return html;
+    }
+
+    function mulaiUjian() {
+        if(!document.getElementById('nama').value || !document.getElementById('nis').value) return alert("Lengkapi data diri!");
+        document.getElementById('login-section').style.display = 'none';
+        document.getElementById('loader').style.display = 'block';
+
+        fetch(SCRIPT_URL).then(res => res.json()).then(data => {
+            document.getElementById('loader').style.display = 'none';
+            const container = document.getElementById('form-ujian');
+            
+            data.forEach((soal, index) => {
+                let kontenSoal = `<div class="soal-card">
+                    <div class="badge">${soal.tipe}</div>
+                    <div class="soal-teks">${index + 1}. ${soal.pertanyaan.teks}</div>
+                    ${soal.pertanyaan.media ? `<div class="media-container">${parseMedia(soal.pertanyaan.media)}</div>` : ''}
+                `;
+
+                // Render Input Berdasarkan Tipe
+                if(soal.tipe === 'PG') {
+                    kontenSoal += renderOpsiPG(soal, false);
+                } 
+                else if (soal.tipe === 'PGK') {
+                    kontenSoal += renderOpsiPG(soal, true);
+                    kontenSoal += `<small style="color:#7f8c8d;">*Anda dapat memilih lebih dari satu jawaban.</small>`;
+                }
+                else if (soal.tipe === 'ISIAN') {
+                    kontenSoal += `<input type="text" name="${soal.id}" placeholder="Ketik jawaban singkat di sini...">`;
+                }
+                else if (soal.tipe === 'URAIAN') {
+                    kontenSoal += `<textarea name="${soal.id}" rows="4" placeholder="Ketik jawaban uraian secara lengkap di sini..."></textarea>`;
+                }
+                else if (soal.tipe === 'JODOH') {
+                    const premisList = [soal.opsiA, soal.opsiB, soal.opsiC, soal.opsiD, soal.opsiE].filter(o => o.teks !== "" || o.media !== "");
+                    premisList.forEach((premis, idx) => {
+                        kontenSoal += `
+                        <div class="jodoh-row">
+                            <div style="flex-grow:1;">${String.fromCharCode(65+idx)}. ${premis.teks} ${premis.media ? parseMedia(premis.media) : ''}</div>
+                            <select name="jodoh_${soal.id}_${idx}">
+                                <option value="">-- Pilih --</option>
+                                <option value="1">Pasangan 1</option><option value="2">Pasangan 2</option>
+                                <option value="3">Pasangan 3</option><option value="4">Pasangan 4</option><option value="5">Pasangan 5</option>
+                            </select>
+                        </div>`;
+                    });
+                }
+                kontenSoal += `</div>`;
+                container.innerHTML += kontenSoal;
+            });
+            document.getElementById('soal-container').style.display = 'block';
+        }).catch(err => {
+            alert("Gagal memuat bank soal.");
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('login-section').style.display = 'block';
+        });
+    }
+
+    function kirimJawaban() {
+        const btn = document.getElementById('btn-submit');
+        btn.innerText = "Memproses Penilaian...";
+        btn.disabled = true;
+
+        let finalJawaban = {};
+        
+        // Cek semua soal div untuk membaca input
+        document.querySelectorAll('.soal-card').forEach(card => {
+            // Deteksi ID Soal dari name input/textarea/select yang ada di dalamnya
+            let input = card.querySelector('input, textarea, select');
+            if(!input) return;
+            
+            let id = input.name.startsWith('jodoh_') ? input.name.split('_')[1] : input.name;
+            let tipeBadge = card.querySelector('.badge').innerText;
+
+            if (tipeBadge === 'PG' || tipeBadge === 'ISIAN' || tipeBadge === 'URAIAN') {
+                let val = card.querySelector(`[name="${id}"]:checked, [name="${id}"][type="text"], textarea[name="${id}"]`);
+                finalJawaban[id] = val ? val.value : "";
+            } 
+            else if (tipeBadge === 'PGK') {
+                let checked = Array.from(card.querySelectorAll(`input[name="${id}"]:checked`)).map(cb => cb.value);
+                finalJawaban[id] = checked.join(',');
+            }
+            else if (tipeBadge === 'JODOH') {
+                let selects = Array.from(card.querySelectorAll(`select[name^="jodoh_${id}"]`)).map(sel => sel.value || "0");
+                finalJawaban[id] = selects.join(','); // Hasil: "1,4,2,0,5"
+            }
+        });
+
+        const payload = {
+            action: 'submit_ujian', // Tambahkan baris ini
+            nama: document.getElementById('nama').value,
+            nis: document.getElementById('nis').value,
+            jawaban: finalJawaban
+        };
+
+        fetch(SCRIPT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.status === 'success') {
+                document.getElementById('soal-container').innerHTML = `
+                    <h3 style="text-align:center;">Ujian Selesai!</h3>
+                    <p style="text-align:center;">Nilai Pilihan Ganda & Isian: <br><span style="font-size:40px; font-weight:bold; color:var(--primary)">${data.nilai}</span></p>
+                    <p style="text-align:center; color:#7f8c8d;">(Soal uraian akan dikoreksi manual oleh guru)</p>
+                `;
+            } else {
+                alert("Kesalahan Sistem: " + data.message);
+                btn.innerText = "Selesai & Kirim Jawaban";
+                btn.disabled = false;
+            }
+        }).catch(err => {
+            alert("Koneksi terputus saat mengirim jawaban.");
+            btn.innerText = "Selesai & Kirim Jawaban";
+            btn.disabled = false;
+        });
+    }
+</script>
+
+</body>
+</html>

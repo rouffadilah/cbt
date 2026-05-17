@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Input Soal CBT</title>
+    <style>
+        :root { --primary: #2c3e50; --accent: #27ae60; --bg: #f4f7f6;}
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); padding: 20px; margin: 0; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: var(--primary); border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #333;}
+        input[type="text"], textarea, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-family: inherit; }
+        .opsi-group { background: #f9f9f9; padding: 15px; margin-bottom: 10px; border-left: 4px solid var(--primary); border-radius: 4px; }
+        .opsi-group label { color: var(--primary); font-size: 14px;}
+        button { background: var(--accent); color: white; border: none; padding: 12px 20px; cursor: pointer; width: 100%; font-size: 16px; font-weight: bold; border-radius: 4px; transition: 0.3s;}
+        button:hover { background: #219653; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Panel Pembuat Soal</h2>
+    <form id="form-admin" onsubmit="submitSoal(event)">
+        
+        <div class="form-group">
+            <label>Tipe Soal</label>
+            <select id="tipe_soal" onchange="aturForm()" required>
+                <option value="PG">Pilihan Ganda (PG)</option>
+                <option value="PGK">Pilihan Ganda Kompleks (PGK)</option>
+                <option value="ISIAN">Isian Singkat</option>
+                <option value="URAIAN">Uraian</option>
+                <option value="JODOH">Menjodohkan</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Pertanyaan (Teks)</label>
+            <textarea id="pertanyaan_teks" rows="3" placeholder="Contoh: Apa fungsi utama dari router Mikrotik...?" required></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Tautan Media Pertanyaan (Opsional - URL GDrive/Gambar)</label>
+            <input type="text" id="pertanyaan_media" placeholder="https://...">
+        </div>
+
+        <div id="wadah-opsi">
+            <div class="opsi-group">
+                <label>Opsi A</label>
+                <input type="text" id="opsiA_teks" placeholder="Teks Opsi A">
+                <input type="text" id="opsiA_media" placeholder="Link Media Opsi A (Opsional)" style="margin-top:5px;">
+            </div>
+            <div class="opsi-group">
+                <label>Opsi B</label>
+                <input type="text" id="opsiB_teks" placeholder="Teks Opsi B">
+                <input type="text" id="opsiB_media" placeholder="Link Media Opsi B (Opsional)" style="margin-top:5px;">
+            </div>
+            <div class="opsi-group">
+                <label>Opsi C</label>
+                <input type="text" id="opsiC_teks" placeholder="Teks Opsi C">
+                <input type="text" id="opsiC_media" placeholder="Link Media Opsi C (Opsional)" style="margin-top:5px;">
+            </div>
+            <div class="opsi-group">
+                <label>Opsi D</label>
+                <input type="text" id="opsiD_teks" placeholder="Teks Opsi D">
+                <input type="text" id="opsiD_media" placeholder="Link Media Opsi D (Opsional)" style="margin-top:5px;">
+            </div>
+            <div class="opsi-group">
+                <label>Opsi E</label>
+                <input type="text" id="opsiE_teks" placeholder="Teks Opsi E">
+                <input type="text" id="opsiE_media" placeholder="Link Media Opsi E (Opsional)" style="margin-top:5px;">
+            </div>
+        </div>
+
+        <div class="form-group" id="wadah-kunci">
+            <label>Kunci Jawaban</label>
+            <input type="text" id="kunci" placeholder="Contoh: A (untuk PG) atau A,C (untuk PGK) atau kata (untuk Isian)">
+            <small style="color:#666;">*Kosongkan jika soal Uraian.</small>
+        </div>
+
+        <button type="submit" id="btn-simpan">Simpan Soal ke Database</button>
+    </form>
+</div>
+
+<script>
+    // MASUKKAN URL WEB APP ANDA DI SINI
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzeYhWdl6rpTnQxOvW4j6tNGIb421Nu7s9sn-aGJjSRVYlAcdKX6josoOvrRTDRYibSfA/exec';
+
+    // Menyembunyikan kolom opsi jika tipe soal adalah Uraian atau Isian Singkat
+    function aturForm() {
+        const tipe = document.getElementById('tipe_soal').value;
+        const wadahOpsi = document.getElementById('wadah-opsi');
+        
+        if (tipe === 'URAIAN' || tipe === 'ISIAN') {
+            wadahOpsi.classList.add('hidden');
+        } else {
+            wadahOpsi.classList.remove('hidden');
+        }
+    }
+
+    function submitSoal(e) {
+        e.preventDefault(); // Mencegah reload halaman
+        
+        const btn = document.getElementById('btn-simpan');
+        btn.innerText = "Menyimpan...";
+        btn.disabled = true;
+
+        // Mengambil seluruh data dari form
+        const dataSoal = {
+            tipe: document.getElementById('tipe_soal').value,
+            pertanyaan_teks: document.getElementById('pertanyaan_teks').value,
+            pertanyaan_media: document.getElementById('pertanyaan_media').value,
+            opsiA_teks: document.getElementById('opsiA_teks').value,
+            opsiA_media: document.getElementById('opsiA_media').value,
+            opsiB_teks: document.getElementById('opsiB_teks').value,
+            opsiB_media: document.getElementById('opsiB_media').value,
+            opsiC_teks: document.getElementById('opsiC_teks').value,
+            opsiC_media: document.getElementById('opsiC_media').value,
+            opsiD_teks: document.getElementById('opsiD_teks').value,
+            opsiD_media: document.getElementById('opsiD_media').value,
+            opsiE_teks: document.getElementById('opsiE_teks').value,
+            opsiE_media: document.getElementById('opsiE_media').value,
+            kunci: document.getElementById('kunci').value
+        };
+
+        const payload = {
+            action: 'tambah_soal',
+            data: dataSoal
+        };
+
+        fetch(SCRIPT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(resData => {
+            alert(resData.message);
+            // Reset form setelah berhasil
+            document.getElementById('form-admin').reset();
+            aturForm();
+            btn.innerText = "Simpan Soal ke Database";
+            btn.disabled = false;
+        })
+        .catch(err => {
+            alert("Terjadi kesalahan saat menyimpan soal.");
+            btn.innerText = "Simpan Soal ke Database";
+            btn.disabled = false;
+        });
+    }
+</script>
+
+</body>
+</html>
