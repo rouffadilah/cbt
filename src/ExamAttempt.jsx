@@ -34,20 +34,26 @@ export default function ExamAttempt() {
     const maxPelanggaran = 3;
     const timerIntervalRef = useRef(null);
     const isPrivilegedRef = useRef(false);
+    
+    // Pengunci loop alert saat jendela kehilangan fokus
+    const isAlertShowingRef = useRef(false); 
 
-    // Jam Real-time Header
+    // Jam Real-time
     const [timeString, setTimeString] = useState('Menghubungkan waktu server...');
     useEffect(() => {
         const timer = setInterval(() => {
             const sekarang = new Date();
             const strTanggal = sekarang.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-            const strJam = sekarang.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\./g, ':');
+            const strJam = ThermalClock(sekarang);
             setTimeString(`${strTanggal} | ${strJam} WIB`);
         }, 1000);
         return () => clearInterval(timer);
     }, []);
 
-    // Firebase Auth State
+    const ThermalClock = (d) => {
+        return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\./g, ':');
+    };
+
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (!user) return;
@@ -65,7 +71,6 @@ export default function ExamAttempt() {
         return () => unsubscribe();
     }, [navigate]);
 
-    // Ambil Data Akademik
     useEffect(() => {
         const loadAkademik = async () => {
             try {
@@ -88,7 +93,6 @@ export default function ExamAttempt() {
         loadAkademik();
     }, [searchParams]);
 
-    // Validasi Token Required
     useEffect(() => {
         const checkTokenRequired = async () => {
             const urlMapel = searchParams.get('mapel');
@@ -108,33 +112,14 @@ export default function ExamAttempt() {
         checkTokenRequired();
     }, [selectedKelas, selectedMapel, searchParams]);
 
-    // Dark Mode Handling
     useEffect(() => {
         if (isDarkMode) { document.body.classList.add('dark-mode'); localStorage.setItem('theme', 'dark'); } 
         else { document.body.classList.remove('dark-mode'); localStorage.setItem('theme', 'light'); }
     }, [isDarkMode]);
 
-    // MEKANISME SECURE AUTO-SAVE (Enkripsi Base64) & PEMULIHAN PROGRES
-    const triggerAutosaveLokal = (jwbUpdate, raguUpdate, detikSekarang) => {
-        if (!student || !selectedMapel) return;
-        const payload = {
-            jawabanSiswa: jwbUpdate,
-            raguRagu: raguUpdate,
-            sisaDetik: detikSekarang,
-            savedAt: Date.now() // Timestamp penguncian waktu nyata
-        };
-        const encryptedData = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-        localStorage.setItem(`cbt_secure_session_${student.uid}_${selectedMapel}`, encryptedData);
-    };
-
-    // Sinkronisasi otomatis setiap kali ada perubahan data/detik berjalan
-    useEffect(() => {
-        if (isExamActive && student?.uid && selectedMapel && durasiDetik > 0) {
-            triggerAutosaveLokal(jawabanSiswa, raguRagu, durasiDetik);
-        }
-    }, [durasiDetik, jawabanSiswa, raguRagu, isExamActive, student, selectedMapel]);
-
-    // PROTEKSI MAKSIMAL: Mencegah Klik Kanan, Inspect Element, Salin, Tempel, Potong Teks
+    // ==========================================
+    // LAYER SECURITY 1: PERTAHANAN KEYBOARD & KLIK
+    // ==========================================
     useEffect(() => {
         const handleContextMenu = (e) => { if (!isPrivilegedRef.current) e.preventDefault(); };
         const handleClipboard = (e) => { if (!isPrivilegedRef.current) e.preventDefault(); };
@@ -161,37 +146,57 @@ export default function ExamAttempt() {
         };
     }, []);
 
-    // DETEKSI KECURANGAN: Tab Switching & Fullscreen Escape
+    // ==========================================
+    // LAYER SECURITY 2: DETEKSI GAIB (TAB & WINDOW BLUR)
+    // ==========================================
     useEffect(() => {
         if (!isExamActive || isPrivilegedRef.current) return;
+
+        const pemicuPelanggaranDefansif = (pesan) => {
+            if (isAlertShowingRef.current) return; 
+            document.body.style.filter = "blur(30px)";
+            pemicuPelanggaran(pesan);
+        };
+
         const handleVisibilityChange = () => { 
-            if (document.hidden) { 
-                document.body.style.filter = "blur(25px)"; 
-                pemicuPelanggaran("Sistem mendeteksi Anda membuka tab atau aplikasi lain!"); 
-            } else { 
-                document.body.style.filter = "none"; 
-            } 
+            if (document.hidden) pemicuPelanggaranDefansif("Sistem mendeteksi Anda meminimalkan browser atau membuka tab baru!"); 
         };
+
+        const handleWindowBlur = () => {
+            // Menangkap split screen atau klik di luar jendela ujian
+            pemicuPelanggaranDefansif("Fokus Ujian Hilang! Anda terdeteksi mengklik aplikasi lain atau melakukan split screen!");
+        };
+
         const handleFullscreenChange = () => { 
-            if (!document.fullscreenElement) { 
-                pemicuPelanggaran("Mode Layar Penuh (Fullscreen) dimatikan!"); 
-            } 
+            if (!document.fullscreenElement) pemicuPelanggaranDefansif("Mode Layar Penuh (Fullscreen) dimatikan secara sengaja!"); 
         };
+
         document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('blur', handleWindowBlur);
         document.addEventListener('fullscreenchange', handleFullscreenChange);
-        return () => { document.removeEventListener('visibilitychange', handleVisibilityChange); document.removeEventListener('fullscreenchange', handleFullscreenChange); };
+
+        return () => { 
+            document.removeEventListener('visibilitychange', handleVisibilityChange); 
+            window.removeEventListener('blur', handleWindowBlur);
+            document.removeEventListener('fullscreenchange', handleFullscreenChange); 
+        };
     }, [isExamActive, pelanggaran]);
 
     const pemicuPelanggaran = (alasan) => {
+        isAlertShowingRef.current = true;
         const upPelanggaran = pelanggaran + 1;
         setPelanggaran(upPelanggaran);
+
         if (upPelanggaran >= maxPelanggaran) {
             clearInterval(timerIntervalRef.current);
             setIsExamActive(false);
-            alert(`Ujian dihentikan karena mencapai batas maksimal ${maxPelanggaran} kali pelanggaran.\n\nAlasan Terakhir: ${alasan}`);
+            alert(`Ujian dihentikan! Anda telah mencapai batas maksimal ${maxPelanggaran} kali pelanggaran.\n\nPelanggaran Terakhir: ${alasan}`);
+            isAlertShowingRef.current = false;
             eksekusiSelesaiUjian("DISKUALIFIKASI", upPelanggaran);
         } else {
-            alert(`${alasan}\n\nPeringatan ${upPelanggaran}/${maxPelanggaran}!\nJika mencapai batas, ujian otomatis selesai.`);
+            alert(`TINDAKAN KECURANGAN TERDETEKSI!\n\nAlasan: ${alasan}\n\nPeringatan Ke: ${upPelanggaran} dari ${maxPelanggaran}.\nJika melanggar lagi, ujian otomatis dikunci & nilai dinolkan.`);
+            document.body.style.filter = "none";
+            isAlertShowingRef.current = false;
             masukFullscreen();
         }
     };
@@ -199,7 +204,33 @@ export default function ExamAttempt() {
     const masukFullscreen = () => { if (isPrivilegedRef.current) return; const el = document.documentElement; if (el.requestFullscreen) el.requestFullscreen().catch(() => {}); };
     const keluarFullscreen = () => { if (document.fullscreenElement && document.exitFullscreen) { document.exitFullscreen().catch(() => {}); } };
 
-    // PROSES EKSEKUSI MULAI UJIAN & PEMULIHAN FAILSAFE
+    // ==========================================
+    // LAYER SECURITY 3: ENKRIPSI AUTO SAVE LOKAL
+    // ==========================================
+    const triggerAutosaveLokal = (jwbUpdate, raguUpdate) => {
+        if (!student || !selectedMapel) return;
+        const paketData = {
+            jawabanSiswa: jwbUpdate,
+            raguRagu: raguUpdate,
+            savedAt: Date.now()
+        };
+        // Enkripsi Base64 sederhana agar tidak bisa diedit di Application tab DevTools
+        const encrypted = btoa(unescape(encodeURIComponent(JSON.stringify(paketData))));
+        localStorage.setItem(`cbt_secure_ans_${student.uid}_${selectedMapel}`, encrypted);
+    };
+
+    const muatAutosaveLokal = (studentId, mapelKey) => {
+        const dataMentah = localStorage.getItem(`cbt_secure_ans_${studentId}_${mapelKey}`);
+        if (!dataMentah) return null;
+        try {
+            const decrypted = JSON.parse(decodeURIComponent(escape(atob(dataMentah))));
+            return decrypted;
+        } catch(e) {
+            console.error("Gagal memulihkan jawaban cadangan lokal karena enkripsi rusak.");
+            return null;
+        }
+    };
+
     const handleMulaiUjian = async () => {
         if (!student && !inputNama.trim()) return alert("Silakan isi Nama Lengkap Anda!");
         if (!selectedMapel || !selectedKelas) return alert("Pilih Mapel dan Kelas Anda!");
@@ -226,45 +257,8 @@ export default function ExamAttempt() {
 
             let durasiMenit = 90;
             if (timeSnap.exists() && timeSnap.data()[jadwalKey]) durasiMenit = parseInt(timeSnap.data()[jadwalKey]);
-            
-            // Perhitungan Awal Durasi Default (Detik)
-            let finalDurasiDetik = durasiMenit * 60;
+            setDurasiDetik(durasiMenit * 60);
 
-            // MEMULIHKAN DATA DARI ENKRIPSI LOKAL (JIKA JARINGAN PUTUS/REFRESH)
-            const localKey = `cbt_secure_session_${currentStudentData.uid}_${selectedMapel}`;
-            const savedData = localStorage.getItem(localKey);
-            if (savedData) {
-                try {
-                    const decrypted = JSON.parse(decodeURIComponent(escape(atob(savedData))));
-                    const waktuSekarang = Date.now();
-                    
-                    // ANTI-HACK TRAP: Deteksi kecurangan manipulasi pemunduran jam internal komputer
-                    if (waktuSekarang < decrypted.savedAt) {
-                        alert("Sistem mendeteksi kecurangan manipulasi waktu perangkat! Anda didiskualifikasi dari ujian.");
-                        setIsExamActive(false);
-                        eksekusiSelesaiUjian("DISKUALIFIKASI_JAM", pelanggaran);
-                        return;
-                    }
-                    
-                    // Kalkulasi selisih waktu riil yang berjalan saat terputus/refresh
-                    const elapsedDetik = Math.floor((waktuSekarang - decrypted.savedAt) / 1000);
-                    const sisaWaktuKoreksi = decrypted.sisaDetik - elapsedDetik;
-                    
-                    if (sisaWaktuKoreksi <= 0) {
-                        alert("Waktu ujian Anda telah habis saat Anda menutup halaman portal!");
-                        eksekusiSelesaiUjian("WAKTU HABIS", pelanggaran);
-                        return;
-                    }
-                    
-                    if (decrypted.jawabanSiswa) setJawabanSiswa(decrypted.jawabanSiswa);
-                    if (decrypted.raguRagu) setRaguRagu(decrypted.raguRagu);
-                    finalDurasiDetik = sisaWaktuKoreksi; // Waktu ujian dikoreksi secara presisi
-                } catch (e) {
-                    console.error("Gagal memulihkan sesi terenkripsi", e);
-                }
-            }
-
-            // Ambil Bank Soal
             const qSoal = query(collection(db, "bank_soal"), where("mataPelajaran", "==", selectedMapel));
             const soalSnap = await getDocs(qSoal);
             let listSoalLoaded = [];
@@ -285,23 +279,21 @@ export default function ExamAttempt() {
                 }
             } else { listSoalLoaded.sort((a, b) => (a.nomor_soal || 0) - (b.nomor_soal || 0)); }
 
-            setDurasiDetik(finalDurasiDetik);
-            setArraySoal(listSoalLoaded); 
-            setIsExamActive(true); 
-            jalankanTimerCountdown();
+            // Memulihkan data jawaban otomatis jika mati lampu/mati jaringan internet
+            const dataPulih = muatAutosaveLokal(currentStudentData.uid, selectedMapel);
+            if (dataPulih) {
+                if (dataPulih.jawabanSiswa) setJawabanSiswa(dataPulih.jawabanSiswa);
+                if (dataPulih.raguRagu) setRaguRagu(dataPulih.raguRagu);
+            }
+
+            setArraySoal(listSoalLoaded); setIsExamActive(true); jalankanTimerCountdown();
         } catch (e) { keluarFullscreen(); alert(e.message); } finally { setLoading(false); }
     };
 
     const jalankanTimerCountdown = () => {
-        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = setInterval(() => {
             setDurasiDetik((prevDetik) => {
-                if (prevDetik <= 1) { 
-                    clearInterval(timerIntervalRef.current); 
-                    alert("Waktu ujian telah habis! Jawaban otomatis dikirim."); 
-                    eksekusiSelesaiUjian("WAKTU HABIS", pelanggaran); 
-                    return 0; 
-                }
+                if (prevDetik <= 1) { clearInterval(timerIntervalRef.current); alert("Waktu ujian telah habis! Jawaban otomatis dikirim."); eksekusiSelesaiUjian("WAKTU HABIS", pelanggaran); return 0; }
                 return prevDetik - 1;
             });
         }, 1000);
@@ -322,18 +314,18 @@ export default function ExamAttempt() {
             else currentArr.push(value);
             updated[soalId] = currentArr;
         } else { updated[soalId] = value; }
-        setJawabanSiswa(updated);
+        setJawabanSiswa(updated); triggerAutosaveLokal(updated, raguRagu);
     };
 
     const handleInputMenjodohkan = (soalId, kiri, kanan) => {
         let updated = { ...jawabanSiswa }; let currentObj = updated[soalId] || {};
         currentObj[kiri] = kanan; updated[soalId] = currentObj;
-        setJawabanSiswa(updated);
+        setJawabanSiswa(updated); triggerAutosaveLokal(updated, raguRagu);
     };
 
     const toggleRaguRagu = (soalId) => {
         let updated = { ...raguRagu, [soalId]: !raguRagu[soalId] };
-        setRaguRagu(updated);
+        setRaguRagu(updated); triggerAutosaveLokal(jawabanSiswa, updated);
     };
 
     const checkSelesaiUjian = () => {
@@ -357,7 +349,6 @@ export default function ExamAttempt() {
 
     const eksekusiSelesaiUjian = async (statusAkhir, finalPelanggaran) => {
         setIsExamActive(false); keluarFullscreen(); setLoading(true);
-        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
         let totalBobotPG = 0; let skorDiperolehPG = 0;
 
         arraySoal.forEach(s => {
@@ -383,17 +374,11 @@ export default function ExamAttempt() {
 
         try {
             await addDoc(collection(db, "hasil_ujian"), payload);
-            
-            // BERSIHKAN DATA SESI LOKAL JIKA BERHASIL TERKIRIM KE FIREBASE
-            localStorage.removeItem(`cbt_secure_session_${student.uid}_${selectedMapel}`);
-            
+            // Hapus cadangan enkripsi setelah sukses mengirim agar memori browser bersih kembali
+            localStorage.removeItem(`cbt_secure_ans_${student.uid}_${selectedMapel}`);
             alert("Lembar jawaban Anda berhasil direkam dengan aman oleh server!");
-            navigate('/dashboard'); // Navigasi Internal (Menghindari Kerusakan Jalur URL / Error 404)
-        } catch (e) { 
-            alert("Gagal Menyimpan! Hubungi pengawas ruangan dan JANGAN tutup halaman ini."); 
-        } finally { 
-            setLoading(false); 
-        }
+            navigate('/dashboard'); 
+        } catch (e) { alert("Gagal Menyimpan! Hubungi pengawas ruangan dan JANGAN tutup halaman ini."); } finally { setLoading(false); }
     };
 
     const handleKeluarPortal = async () => {
@@ -414,7 +399,6 @@ export default function ExamAttempt() {
                         
                         <div className="login-header" style={{ marginBottom: 20 }}>
                             <span className="login-badge" style={{ marginBottom: 12 }}><i className="fas fa-file-signature"></i> Portal Ujian</span>
-                            {/* Memperbaiki Link Logo Menggunakan Variabel Eksplisit */}
                             <img src={logoSmaich} alt="Logo Smaich" className="main-logo" style={{ margin: '0 auto 8px auto', height: 70 }} onError={(e)=>e.target.src='https://via.placeholder.com/80?text=Logo'} />
                             <div className="realtime-clock" style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                                 <i className="far fa-calendar-alt"></i> {timeString}
@@ -467,11 +451,9 @@ export default function ExamAttempt() {
     const tipeSoal = (currentSoal?.tipe || 'PG').toUpperCase();
 
     return (
-        // Menonaktifkan Penyorotan Teks (User Selection) untuk mencegah copy paste teks
         <div id="exam-workspace" style={{ display: 'flex', height: '100vh', flexDirection: 'column', overflow: 'hidden', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>
             <header className="exam-header">
                 <div className="exam-header-center">
-                    {/* Memperbaiki Link Logo Menggunakan Variabel Eksplisit */}
                     <img src={logoSmaich} alt="Logo" onError={(e)=>e.target.src='https://via.placeholder.com/120x40?text=CBT'} style={{ height: 42, width: 'auto', objectFit: 'contain' }} />
                 </div>
                 
