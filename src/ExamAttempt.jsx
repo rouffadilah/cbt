@@ -35,7 +35,7 @@ export default function ExamAttempt() {
     const timerIntervalRef = useRef(null);
     const isPrivilegedRef = useRef(false);
 
-    // Jam Real-time
+    // Jam Real-time Header
     const [timeString, setTimeString] = useState('Menghubungkan waktu server...');
     useEffect(() => {
         const timer = setInterval(() => {
@@ -47,6 +47,7 @@ export default function ExamAttempt() {
         return () => clearInterval(timer);
     }, []);
 
+    // Firebase Auth State
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (!user) return;
@@ -64,6 +65,7 @@ export default function ExamAttempt() {
         return () => unsubscribe();
     }, [navigate]);
 
+    // Ambil Data Akademik
     useEffect(() => {
         const loadAkademik = async () => {
             try {
@@ -86,6 +88,7 @@ export default function ExamAttempt() {
         loadAkademik();
     }, [searchParams]);
 
+    // Validasi Token Required
     useEffect(() => {
         const checkTokenRequired = async () => {
             const urlMapel = searchParams.get('mapel');
@@ -105,27 +108,75 @@ export default function ExamAttempt() {
         checkTokenRequired();
     }, [selectedKelas, selectedMapel, searchParams]);
 
+    // Dark Mode Handling
     useEffect(() => {
         if (isDarkMode) { document.body.classList.add('dark-mode'); localStorage.setItem('theme', 'dark'); } 
         else { document.body.classList.remove('dark-mode'); localStorage.setItem('theme', 'light'); }
     }, [isDarkMode]);
 
+    // MEKANISME SECURE AUTO-SAVE (Enkripsi Base64) & PEMULIHAN PROGRES
+    const triggerAutosaveLokal = (jwbUpdate, raguUpdate, detikSekarang) => {
+        if (!student || !selectedMapel) return;
+        const payload = {
+            jawabanSiswa: jwbUpdate,
+            raguRagu: raguUpdate,
+            sisaDetik: detikSekarang,
+            savedAt: Date.now() // Timestamp penguncian waktu nyata
+        };
+        const encryptedData = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+        localStorage.setItem(`cbt_secure_session_${student.uid}_${selectedMapel}`, encryptedData);
+    };
+
+    // Sinkronisasi otomatis setiap kali ada perubahan data/detik berjalan
+    useEffect(() => {
+        if (isExamActive && student?.uid && selectedMapel && durasiDetik > 0) {
+            triggerAutosaveLokal(jawabanSiswa, raguRagu, durasiDetik);
+        }
+    }, [durasiDetik, jawabanSiswa, raguRagu, isExamActive, student, selectedMapel]);
+
+    // PROTEKSI MAKSIMAL: Mencegah Klik Kanan, Inspect Element, Salin, Tempel, Potong Teks
     useEffect(() => {
         const handleContextMenu = (e) => { if (!isPrivilegedRef.current) e.preventDefault(); };
+        const handleClipboard = (e) => { if (!isPrivilegedRef.current) e.preventDefault(); };
         const handleKeyDown = (e) => {
             if (isPrivilegedRef.current) return;
             const forbidden = ['F12', 'PrintScreen', 'Meta', 'OS', 'ContextMenu'];
-            if (forbidden.includes(e.key) || (e.ctrlKey && ['c', 'v', 'x', 'u', 'p', 's', 'a', 'f'].includes(e.key.toLowerCase())) || (e.ctrlKey && e.shiftKey && ['i', 'j', 'c', 's'].includes(e.key.toLowerCase()))) { e.preventDefault(); }
+            if (forbidden.includes(e.key) || (e.ctrlKey && ['c', 'v', 'x', 'u', 'p', 's', 'a', 'f'].includes(e.key.toLowerCase())) || (e.ctrlKey && e.shiftKey && ['i', 'j', 'c', 's'].includes(e.key.toLowerCase()))) { 
+                e.preventDefault(); 
+            }
         };
+        
         document.addEventListener('contextmenu', handleContextMenu);
         document.addEventListener('keydown', handleKeyDown);
-        return () => { document.removeEventListener('contextmenu', handleContextMenu); document.removeEventListener('keydown', handleKeyDown); };
+        document.addEventListener('copy', handleClipboard);
+        document.addEventListener('cut', handleClipboard);
+        document.addEventListener('paste', handleClipboard);
+        
+        return () => { 
+            document.removeEventListener('contextmenu', handleContextMenu); 
+            document.removeEventListener('keydown', handleKeyDown); 
+            document.removeEventListener('copy', handleClipboard);
+            document.removeEventListener('cut', handleClipboard);
+            document.removeEventListener('paste', handleClipboard);
+        };
     }, []);
 
+    // DETEKSI KECURANGAN: Tab Switching & Fullscreen Escape
     useEffect(() => {
         if (!isExamActive || isPrivilegedRef.current) return;
-        const handleVisibilityChange = () => { if (document.hidden) { document.body.style.filter = "blur(25px)"; pemicuPelanggaran("Sistem mendeteksi Anda membuka tab atau aplikasi lain!"); } else { document.body.style.filter = "none"; } };
-        const handleFullscreenChange = () => { if (!document.fullscreenElement) { pemicuPelanggaran("Mode Layar Penuh (Fullscreen) dimatikan!"); } };
+        const handleVisibilityChange = () => { 
+            if (document.hidden) { 
+                document.body.style.filter = "blur(25px)"; 
+                pemicuPelanggaran("Sistem mendeteksi Anda membuka tab atau aplikasi lain!"); 
+            } else { 
+                document.body.style.filter = "none"; 
+            } 
+        };
+        const handleFullscreenChange = () => { 
+            if (!document.fullscreenElement) { 
+                pemicuPelanggaran("Mode Layar Penuh (Fullscreen) dimatikan!"); 
+            } 
+        };
         document.addEventListener('visibilitychange', handleVisibilityChange);
         document.addEventListener('fullscreenchange', handleFullscreenChange);
         return () => { document.removeEventListener('visibilitychange', handleVisibilityChange); document.removeEventListener('fullscreenchange', handleFullscreenChange); };
@@ -148,6 +199,7 @@ export default function ExamAttempt() {
     const masukFullscreen = () => { if (isPrivilegedRef.current) return; const el = document.documentElement; if (el.requestFullscreen) el.requestFullscreen().catch(() => {}); };
     const keluarFullscreen = () => { if (document.fullscreenElement && document.exitFullscreen) { document.exitFullscreen().catch(() => {}); } };
 
+    // PROSES EKSEKUSI MULAI UJIAN & PEMULIHAN FAILSAFE
     const handleMulaiUjian = async () => {
         if (!student && !inputNama.trim()) return alert("Silakan isi Nama Lengkap Anda!");
         if (!selectedMapel || !selectedKelas) return alert("Pilih Mapel dan Kelas Anda!");
@@ -174,8 +226,45 @@ export default function ExamAttempt() {
 
             let durasiMenit = 90;
             if (timeSnap.exists() && timeSnap.data()[jadwalKey]) durasiMenit = parseInt(timeSnap.data()[jadwalKey]);
-            setDurasiDetik(durasiMenit * 60);
+            
+            // Perhitungan Awal Durasi Default (Detik)
+            let finalDurasiDetik = durasiMenit * 60;
 
+            // MEMULIHKAN DATA DARI ENKRIPSI LOKAL (JIKA JARINGAN PUTUS/REFRESH)
+            const localKey = `cbt_secure_session_${currentStudentData.uid}_${selectedMapel}`;
+            const savedData = localStorage.getItem(localKey);
+            if (savedData) {
+                try {
+                    const decrypted = JSON.parse(decodeURIComponent(escape(atob(savedData))));
+                    const waktuSekarang = Date.now();
+                    
+                    // ANTI-HACK TRAP: Deteksi kecurangan manipulasi pemunduran jam internal komputer
+                    if (waktuSekarang < decrypted.savedAt) {
+                        alert("Sistem mendeteksi kecurangan manipulasi waktu perangkat! Anda didiskualifikasi dari ujian.");
+                        setIsExamActive(false);
+                        eksekusiSelesaiUjian("DISKUALIFIKASI_JAM", pelanggaran);
+                        return;
+                    }
+                    
+                    // Kalkulasi selisih waktu riil yang berjalan saat terputus/refresh
+                    const elapsedDetik = Math.floor((waktuSekarang - decrypted.savedAt) / 1000);
+                    const sisaWaktuKoreksi = decrypted.sisaDetik - elapsedDetik;
+                    
+                    if (sisaWaktuKoreksi <= 0) {
+                        alert("Waktu ujian Anda telah habis saat Anda menutup halaman portal!");
+                        eksekusiSelesaiUjian("WAKTU HABIS", pelanggaran);
+                        return;
+                    }
+                    
+                    if (decrypted.jawabanSiswa) setJawabanSiswa(decrypted.jawabanSiswa);
+                    if (decrypted.raguRagu) setRaguRagu(decrypted.raguRagu);
+                    finalDurasiDetik = sisaWaktuKoreksi; // Waktu ujian dikoreksi secara presisi
+                } catch (e) {
+                    console.error("Gagal memulihkan sesi terenkripsi", e);
+                }
+            }
+
+            // Ambil Bank Soal
             const qSoal = query(collection(db, "bank_soal"), where("mataPelajaran", "==", selectedMapel));
             const soalSnap = await getDocs(qSoal);
             let listSoalLoaded = [];
@@ -196,24 +285,23 @@ export default function ExamAttempt() {
                 }
             } else { listSoalLoaded.sort((a, b) => (a.nomor_soal || 0) - (b.nomor_soal || 0)); }
 
-            const localKey = `cbt_ans_${currentStudentData.uid}_${selectedMapel}`;
-            const savedData = localStorage.getItem(localKey);
-            if (savedData) {
-                try {
-                    const parsed = JSON.parse(savedData);
-                    if (parsed.jawabanSiswa) setJawabanSiswa(parsed.jawabanSiswa);
-                    if (parsed.raguRagu) setRaguRagu(parsed.raguRagu);
-                } catch (e) {}
-            }
-
-            setArraySoal(listSoalLoaded); setIsExamActive(true); jalankanTimerCountdown();
+            setDurasiDetik(finalDurasiDetik);
+            setArraySoal(listSoalLoaded); 
+            setIsExamActive(true); 
+            jalankanTimerCountdown();
         } catch (e) { keluarFullscreen(); alert(e.message); } finally { setLoading(false); }
     };
 
     const jalankanTimerCountdown = () => {
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = setInterval(() => {
             setDurasiDetik((prevDetik) => {
-                if (prevDetik <= 1) { clearInterval(timerIntervalRef.current); alert("Waktu ujian telah habis! Jawaban otomatis dikirim."); eksekusiSelesaiUjian("WAKTU HABIS", pelanggaran); return 0; }
+                if (prevDetik <= 1) { 
+                    clearInterval(timerIntervalRef.current); 
+                    alert("Waktu ujian telah habis! Jawaban otomatis dikirim."); 
+                    eksekusiSelesaiUjian("WAKTU HABIS", pelanggaran); 
+                    return 0; 
+                }
                 return prevDetik - 1;
             });
         }, 1000);
@@ -226,11 +314,6 @@ export default function ExamAttempt() {
         return `${j}:${m}:${d}`;
     };
 
-    const triggerAutosaveLokal = (jwbUpdate, raguUpdate) => {
-        if (!student || !selectedMapel) return;
-        localStorage.setItem(`cbt_ans_${student.uid}_${selectedMapel}`, JSON.stringify({ jawabanSiswa: jwbUpdate, raguRagu: raguUpdate }));
-    };
-
     const handleInputJawaban = (soalId, value, tipeSoal) => {
         let updated = { ...jawabanSiswa };
         if (tipeSoal === 'PGK') {
@@ -239,18 +322,18 @@ export default function ExamAttempt() {
             else currentArr.push(value);
             updated[soalId] = currentArr;
         } else { updated[soalId] = value; }
-        setJawabanSiswa(updated); triggerAutosaveLokal(updated, raguRagu);
+        setJawabanSiswa(updated);
     };
 
     const handleInputMenjodohkan = (soalId, kiri, kanan) => {
         let updated = { ...jawabanSiswa }; let currentObj = updated[soalId] || {};
         currentObj[kiri] = kanan; updated[soalId] = currentObj;
-        setJawabanSiswa(updated); triggerAutosaveLokal(updated, raguRagu);
+        setJawabanSiswa(updated);
     };
 
     const toggleRaguRagu = (soalId) => {
         let updated = { ...raguRagu, [soalId]: !raguRagu[soalId] };
-        setRaguRagu(updated); triggerAutosaveLokal(jawabanSiswa, updated);
+        setRaguRagu(updated);
     };
 
     const checkSelesaiUjian = () => {
@@ -274,6 +357,7 @@ export default function ExamAttempt() {
 
     const eksekusiSelesaiUjian = async (statusAkhir, finalPelanggaran) => {
         setIsExamActive(false); keluarFullscreen(); setLoading(true);
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
         let totalBobotPG = 0; let skorDiperolehPG = 0;
 
         arraySoal.forEach(s => {
@@ -299,10 +383,17 @@ export default function ExamAttempt() {
 
         try {
             await addDoc(collection(db, "hasil_ujian"), payload);
-            localStorage.removeItem(`cbt_ans_${student.uid}_${selectedMapel}`);
+            
+            // BERSIHKAN DATA SESI LOKAL JIKA BERHASIL TERKIRIM KE FIREBASE
+            localStorage.removeItem(`cbt_secure_session_${student.uid}_${selectedMapel}`);
+            
             alert("Lembar jawaban Anda berhasil direkam dengan aman oleh server!");
-            navigate('/dashboard'); // Atau navigate('/') tergantung rute utama Anda
-        } catch (e) { alert("Gagal Menyimpan! Hubungi pengawas ruangan dan JANGAN tutup halaman ini."); } finally { setLoading(false); }
+            navigate('/dashboard'); // Navigasi Internal (Menghindari Kerusakan Jalur URL / Error 404)
+        } catch (e) { 
+            alert("Gagal Menyimpan! Hubungi pengawas ruangan dan JANGAN tutup halaman ini."); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     const handleKeluarPortal = async () => {
@@ -323,6 +414,7 @@ export default function ExamAttempt() {
                         
                         <div className="login-header" style={{ marginBottom: 20 }}>
                             <span className="login-badge" style={{ marginBottom: 12 }}><i className="fas fa-file-signature"></i> Portal Ujian</span>
+                            {/* Memperbaiki Link Logo Menggunakan Variabel Eksplisit */}
                             <img src={logoSmaich} alt="Logo Smaich" className="main-logo" style={{ margin: '0 auto 8px auto', height: 70 }} onError={(e)=>e.target.src='https://via.placeholder.com/80?text=Logo'} />
                             <div className="realtime-clock" style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                                 <i className="far fa-calendar-alt"></i> {timeString}
@@ -375,9 +467,11 @@ export default function ExamAttempt() {
     const tipeSoal = (currentSoal?.tipe || 'PG').toUpperCase();
 
     return (
-        <div id="exam-workspace" style={{ display: 'flex', height: '100vh', flexDirection: 'column', overflow: 'hidden' }}>
+        // Menonaktifkan Penyorotan Teks (User Selection) untuk mencegah copy paste teks
+        <div id="exam-workspace" style={{ display: 'flex', height: '100vh', flexDirection: 'column', overflow: 'hidden', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>
             <header className="exam-header">
                 <div className="exam-header-center">
+                    {/* Memperbaiki Link Logo Menggunakan Variabel Eksplisit */}
                     <img src={logoSmaich} alt="Logo" onError={(e)=>e.target.src='https://via.placeholder.com/120x40?text=CBT'} style={{ height: 42, width: 'auto', objectFit: 'contain' }} />
                 </div>
                 
@@ -512,25 +606,20 @@ export default function ExamAttempt() {
                             if (t === 'MENJODOHKAN' && typeof ans === 'object' && Object.values(ans).some(v => v !== '')) isFilled = true;
                             if (t === 'ESSAY' && ans && ans.trim() !== '') isFilled = true;
 
-                            // LOGIKA WARNA KOTAK SOAL (Pasti Berhasil)
                             let bgColor = 'white';
                             let textColor = '#475569';
                             let borderStyle = '1px solid #cbd5e1';
 
-                            // Jika ragu-ragu (Warna Kuning/Orange)
                             if (raguRagu[s.id]) {
                                 bgColor = '#f59e0b';
                                 textColor = 'white';
                                 borderStyle = '1px solid #d97706';
-                            } 
-                            // Jika sudah dijawab (Warna Hijau)
-                            else if (isFilled) {
+                            } else if (isFilled) {
                                 bgColor = '#10b981';
                                 textColor = 'white';
                                 borderStyle = '1px solid #059669';
                             }
 
-                            // Jika sedang dibuka/aktif (Border Biru Tebal)
                             if (currentIndex === idx) {
                                 borderStyle = '3px solid #3b82f6';
                             }
@@ -570,7 +659,7 @@ export default function ExamAttempt() {
             
             {/* Watermark Pengawasan */}
             <div style={{ position: 'fixed', bottom: 10, left: 10, pointerEvents: 'none', opacity: 0.15, fontSize: '0.8rem', fontWeight: 'bold', color: '#000', zIndex: 9999 }}>
-                {student?.nama} | Secure CBT SMAICH
+                {student?.nama} | Secure CBT-SMAICH
             </div>
         </div>
     );
