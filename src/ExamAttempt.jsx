@@ -58,7 +58,7 @@ export default function ExamAttempt() {
                     isPrivilegedRef.current = roles.includes('admin') || roles.includes('guru');
                     setStudent({ uid: user.uid, ...userData });
                     setInputNama(userData.nama || user.displayName || '');
-                } else navigate('/');
+                } else navigate('/dashboard');
             } catch (e) { console.error(e); }
         });
         return () => unsubscribe();
@@ -307,7 +307,7 @@ export default function ExamAttempt() {
 
     const handleKeluarPortal = async () => {
         if (window.confirm("Yakin ingin membatalkan dan kembali ke halaman Login?")) {
-            await signOut(auth); localStorage.clear(); navigate('/');
+            await signOut(auth); localStorage.clear(); navigate('/dashboard');
         }
     };
 
