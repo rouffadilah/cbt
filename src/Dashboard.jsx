@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, getDocs } from 'firebase/firestore';
 import { auth, db } from './firebase-config';
+import logoSmaich from "./assets/logo-smaich.png";
 import TabPengguna from './TabPengguna';
 import TabBankSoal from './TabBankSoal';
 import TabHasil from './TabHasil';
@@ -143,7 +144,7 @@ export default function Dashboard() {
                 
                 {/* Bagian Tengah: Logo Sekolah Sempurna Berada di Tengah */}
                 <div style={{ cursor: 'pointer', textAlign: 'center', flex: 1 }} onClick={() => setActiveTab('beranda')} title="Kembali ke Beranda">
-                    <img src="/logo-smaich.png" alt="Logo Sekolah" className="brand-logo" onError={(e)=>e.target.src='https://via.placeholder.com/40x40?text=CBT'} style={{ height: 45, margin: '0 auto' }} />
+                    <img src={logoSmaich} alt="Logo Smaich" className="brand-logo" onError={(e)=>e.target.src='https://via.placeholder.com/40x40?text=CBT'} style={{ height: 45, margin: '0 auto' }} />
                     <div id="realtime-clock" style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-muted)', marginTop: 3, letterSpacing: '0.2px', textTransform: 'uppercase' }}>
                         <i className="far fa-calendar-alt"></i> {timeString}
                     </div>

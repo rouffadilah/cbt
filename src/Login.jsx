@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase-config';
+import logoSmaich from "./assets/logo-smaich.png";
 import './index.css'; 
 
 export default function Login() {
@@ -127,7 +128,7 @@ export default function Login() {
                 <div className="login-card">
                     <div className="login-header" style={{ marginBottom: 20 }}>
                         <span className="login-badge" style={{ marginBottom: 12 }}><i className="fas fa-shield-alt"></i>CBT-SMAICH</span>
-                        <img src="/logo-smaich.png" alt="Logo SMAICH" className="main-logo" style={{ height: 70, margin: '0 auto 12px auto' }} onError={(e)=>e.target.src='https://via.placeholder.com/80?text=Logo'} />
+                        <img src={logoSmaich} alt="Logo Smaich" className="main-logo" style={{ height: 70, margin: '0 auto 12px auto' }} onError={(e)=>e.target.src='https://via.placeholder.com/80?text=Logo'} />
                         <div className="realtime-clock" style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)', margin: '4px 0 14px 0', textTransform: 'uppercase' }}>
                             <i className="far fa-calendar-alt"></i> {timeString}
                         </div>
