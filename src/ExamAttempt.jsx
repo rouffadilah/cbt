@@ -301,7 +301,7 @@ export default function ExamAttempt() {
             await addDoc(collection(db, "hasil_ujian"), payload);
             localStorage.removeItem(`cbt_ans_${student.uid}_${selectedMapel}`);
             alert("Lembar jawaban Anda berhasil direkam dengan aman oleh server!");
-            window.location.replace('/');
+            navigate('/dashboard'); // Atau navigate('/') tergantung rute utama Anda
         } catch (e) { alert("Gagal Menyimpan! Hubungi pengawas ruangan dan JANGAN tutup halaman ini."); } finally { setLoading(false); }
     };
 
@@ -378,7 +378,7 @@ export default function ExamAttempt() {
         <div id="exam-workspace" style={{ display: 'flex', height: '100vh', flexDirection: 'column', overflow: 'hidden' }}>
             <header className="exam-header">
                 <div className="exam-header-center">
-                    <img src="/logo-smaich.png" alt="Logo" onError={(e)=>e.target.src='https://via.placeholder.com/120x40?text=CBT'} style={{ height: 42, width: 'auto', objectFit: 'contain' }} />
+                    <img src={logoSmaich} alt="Logo" onError={(e)=>e.target.src='https://via.placeholder.com/120x40?text=CBT'} style={{ height: 42, width: 'auto', objectFit: 'contain' }} />
                 </div>
                 
                 <div className="exam-header-bottom">
