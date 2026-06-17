@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, getDocs, collection, query, where, addDoc } from 'firebase/firestore';
 import { auth, db } from './firebase-config';
+import logoSmaich from "./assets/logo-smaich.png";
 
 export default function ExamAttempt() {
     const navigate = useNavigate();
@@ -322,7 +323,7 @@ export default function ExamAttempt() {
                         
                         <div className="login-header" style={{ marginBottom: 20 }}>
                             <span className="login-badge" style={{ marginBottom: 12 }}><i className="fas fa-file-signature"></i> Portal Ujian</span>
-                            <img src="/logo-smaich.png" alt="Logo SMA ICH" className="main-logo" style={{ margin: '0 auto 8px auto', height: 70 }} onError={(e)=>e.target.src='https://via.placeholder.com/80?text=Logo'} />
+                            <img src={logoSmaich} alt="Logo Smaich" className="main-logo" style={{ margin: '0 auto 8px auto', height: 70 }} onError={(e)=>e.target.src='https://via.placeholder.com/80?text=Logo'} />
                             <div className="realtime-clock" style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                                 <i className="far fa-calendar-alt"></i> {timeString}
                             </div>
