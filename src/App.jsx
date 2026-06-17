@@ -6,7 +6,7 @@ import ExamAttempt from './ExamAttempt'; // Import halaman baru ini
 
 export default function App() {
   return (
-    <HashRouter basename="/cbt">
+    <HashRouter>
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/dashboard" element={<Dashboard />} />
