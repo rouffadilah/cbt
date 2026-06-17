@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase-config';
 import logoSmaich from "./assets/logo-smaich.png";
@@ -38,13 +38,30 @@ export default function Login() {
         }
     }, [isDarkMode]);
 
-    // Cek Sesi
+    // PROTEKSI AKUN HANTU DI HALAMAN LOGIN
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                const roles = JSON.parse(localStorage.getItem("userRole") || "[]");
-                if (roles.includes("admin") || roles.includes("guru")) navigate('/dashboard');
-                else if (roles.includes("siswa")) navigate('/exam');
+                try {
+                    // Cek apakah akun ini masih ADA di database Firestore
+                    const userDoc = await getDoc(doc(db, "users", user.uid));
+                    if (!userDoc.exists()) {
+                        // Jika dihapus oleh admin, paksa keluar dan bersihkan memori
+                        await signOut(auth);
+                        localStorage.clear();
+                        setMessage({ type: 'error', text: 'Akses Ditolak: Akun Anda telah dihapus secara permanen oleh Administrator.' });
+                    } else {
+                        // Jika aman, lanjutkan ke halaman sesuai Role
+                        const userData = userDoc.data();
+                        const roles = userData.role || [];
+                        localStorage.setItem("userRole", JSON.stringify(roles));
+                        
+                        if (roles.includes("admin") || roles.includes("guru")) navigate('/dashboard');
+                        else if (roles.includes("siswa")) navigate('/exam');
+                    }
+                } catch (error) {
+                    console.error("Gagal memvalidasi sesi:", error);
+                }
             }
         });
         return () => unsubscribe();
@@ -62,7 +79,10 @@ export default function Login() {
             const userCred = await signInWithEmailAndPassword(auth, dummyEmail, password);
             const userDoc = await getDoc(doc(db, "users", userCred.user.uid));
 
-            if (!userDoc.exists()) throw new Error("Akun terdaftar di Auth, namun profil di Database tidak ditemukan.");
+            if (!userDoc.exists()) {
+                await signOut(auth);
+                throw new Error("Akun terdaftar di Auth, namun profil di Database tidak ditemukan (Telah dihapus).");
+            }
 
             const userData = userDoc.data();
             const roles = userData.role || [];

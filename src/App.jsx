@@ -2,7 +2,7 @@ import React from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import Login from './Login';
 import Dashboard from './Dashboard';
-import ExamAttempt from './ExamAttempt'; // Import halaman baru ini
+import ExamAttempt from './ExamAttempt'; 
 
 export default function App() {
   return (
@@ -10,7 +10,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/exam" element={<ExamAttempt />} /> {/* Tambahkan baris ini */}
+        <Route path="/exam" element={<ExamAttempt />} /> 
       </Routes>
     </HashRouter>
   );

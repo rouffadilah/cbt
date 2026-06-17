@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase-config';
 import logoSmaich from "./assets/logo-smaich.png";
 import TabPengguna from './TabPengguna';
@@ -20,7 +20,7 @@ export default function Dashboard() {
     const [statSoal, setStatSoal] = useState(0);
     const [statUjian, setStatUjian] = useState(0);
 
-    // Jam Real-time (Sudah diperbaiki)
+    // Jam Real-time
     const [timeString, setTimeString] = useState('Menghubungkan waktu server...');
     useEffect(() => {
         const timer = setInterval(() => {
@@ -32,12 +32,37 @@ export default function Dashboard() {
         return () => clearInterval(timer);
     }, []);
 
+    // PROTEKSI AKUN HANTU DI DASHBOARD ADMIN/GURU
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (!user) { navigate('/'); return; }
-            const roles = JSON.parse(localStorage.getItem("userRole") || "[]");
-            if (!roles.includes("admin") && !roles.includes("guru")) navigate('/exam'); 
-            else setUserProfile({ nama: user.displayName || "Guru/Admin", email: user.email });
+            
+            try {
+                // Cek apakah akun ini sudah dihapus di database
+                const userDoc = await getDoc(doc(db, "users", user.uid));
+                if (!userDoc.exists()) {
+                    await signOut(auth);
+                    localStorage.clear();
+                    alert("Akses Terputus: Akun ini telah dihapus oleh Administrator Utama.");
+                    navigate('/');
+                    return;
+                }
+
+                // Perbarui Role jika baru saja diubah oleh admin lain
+                const userData = userDoc.data();
+                const roles = userData.role || [];
+                localStorage.setItem("userRole", JSON.stringify(roles));
+
+                if (!roles.includes("admin") && !roles.includes("guru")) {
+                    // Jika tiba-tiba rolenya diubah jadi siswa, tendang ke menu ujian
+                    navigate('/exam'); 
+                } else {
+                    setUserProfile({ nama: userData.nama || user.displayName || "Guru/Admin", email: user.email });
+                }
+
+            } catch (error) {
+                console.error("Gagal validasi akun hantu:", error);
+            }
         });
         return () => unsubscribe();
     }, [navigate]);
@@ -58,12 +83,11 @@ export default function Dashboard() {
                 soalSnap.forEach(doc => { 
                     const data = doc.data(); 
                     if(data.mataPelajaran) {
-                        // Menggabungkan Mapel dan Kelas sebagai 1 Paket Ujian
                         const kls = Array.isArray(data.kelas) ? [...data.kelas].sort().join(', ') : (data.kelas || 'Umum');
                         paketUnik.add(`${data.mataPelajaran}_${kls}`); 
                     }
                 });
-                setStatSoal(paketUnik.size); // Sekarang menghitung total Paket Ujian
+                setStatSoal(paketUnik.size); 
 
                 const hasilSnap = await getDocs(collection(db, "hasil_ujian"));
                 setStatUjian(hasilSnap.size);
@@ -102,7 +126,6 @@ export default function Dashboard() {
                                 <div style={{ color: 'var(--info)', fontSize: '2.5rem' }}><i className="fas fa-users"></i></div>
                             </div>
                             
-                            {/* PERBAIKAN TEKS: Teks diubah menjadi "Bank Soal" */}
                             <div className="stat-card" onClick={() => setActiveTab('soal')} style={{ background: 'white', padding: '25px 30px', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', display: 'flex', justifyContent: 'space-between', cursor: 'pointer' }}>
                                 <div><p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 'bold' }}>Bank Soal</p><h3 style={{ fontSize: '2.2rem', margin: 0, color: 'var(--secondary)' }}>{statSoal}</h3></div>
                                 <div style={{ color: 'var(--warning)', fontSize: '2.5rem' }}><i className="fas fa-file-alt"></i></div>

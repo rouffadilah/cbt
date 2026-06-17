@@ -159,17 +159,34 @@ export default function TabPengguna() {
                 mapel: editData.mapel.split(',').map(s => s.trim()).filter(s => s), 
                 kelas: editData.kelas.split(',').map(s => s.trim()).filter(s => s)
             });
-            alert("Data diperbarui!"); setShowEditModal(false); fetchUsers();
+            // Update UI secara instan
+            setUsers(prevUsers => prevUsers.map(u => u.uid === editData.uid ? { ...u, username: editData.username, nama: editData.nama, role: editData.role.split(',').map(s => s.trim()).filter(s => s), mapel: editData.mapel.split(',').map(s => s.trim()).filter(s => s), kelas: editData.kelas.split(',').map(s => s.trim()).filter(s => s) } : u));
+            alert("Data diperbarui!"); 
+            setShowEditModal(false); 
         } catch (error) { alert("Gagal: " + error.message); } finally { setIsSaving(false); }
     };
 
+    // ==========================================
+    // FUNGSI PENGHAPUSAN BARU (INSTAN SINKRON)
+    // ==========================================
     const handleDeleteFromModal = async () => {
-        if (!window.confirm("Yakin menghapus akun ini secara permanen?")) return;
+        if (!window.confirm("Yakin ingin menghapus pengguna ini dari database secara permanen?\n\nCatatan: Jika pengguna ini mencoba login lagi, sistem otomatis akan menendang mereka karena datanya kosong.")) return;
+        
         setIsSaving(true);
         try {
+            // Hapus dokumen di Firestore
             await deleteDoc(doc(db, "users", editData.uid));
-            alert("Akun dihapus!"); setShowEditModal(false); fetchUsers();
-        } catch (error) { alert(`Gagal: ${error.message}`); } finally { setIsSaving(false); }
+            
+            // Perbarui array 'users' di state agar tabel langsung menghilang tanpa perlu reload
+            setUsers(prevUsers => prevUsers.filter(user => user.uid !== editData.uid));
+            
+            alert("Akun berhasil dihapus dari database!"); 
+            setShowEditModal(false); 
+        } catch (error) { 
+            alert(`Gagal menghapus: ${error.message}`); 
+        } finally { 
+            setIsSaving(false); 
+        }
     };
 
     const guruUsers = users.filter(u => {
@@ -200,11 +217,11 @@ export default function TabPengguna() {
             <div className="card" style={{ padding: 0, marginBottom: 20, overflow: 'hidden', background: 'var(--card-bg)', boxShadow: 'var(--shadow-md)' }}>
                 <div style={{ padding: '15px 25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg)', borderBottom: '1px solid var(--border-color)', flexWrap: 'wrap', gap: 10 }}>
                     <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 10 }}><i className="fas fa-users"></i> Akses Pengguna</h3>
-                    {isAdmin && <button onClick={() => setShowAddModal(true)} style={{ background: 'var(--success)', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px', fontSize: '1rem', cursor: 'pointer' }}><i className="fas fa-plus"></i></button>}
+                    {isAdmin && <button onClick={() => setShowAddModal(true)} style={{ background: 'var(--success)', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px', fontSize: '1rem', cursor: 'pointer' }}><i className="fas fa-plus"></i> Tambah</button>}
                 </div>
 
                 <div style={{ padding: 25, background: 'var(--card-bg)' }}>
-                    {loading ? <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}><i className="fas fa-spinner fa-spin fa-2x"></i></div> : (
+                    {loading ? <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}><i className="fas fa-spinner fa-spin fa-2x"></i> Memuat data...</div> : (
                         <>
                             {/* GURU */}
                             <div className="toggle-accordion" onClick={() => setOpenGuru(!openGuru)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, cursor: 'pointer', padding: 10, background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 8 }}>
@@ -315,7 +332,7 @@ export default function TabPengguna() {
                 </div>
             )}
 
-            {/* MODAL TAMBAH (Singkat untuk menghemat ruang) */}
+            {/* MODAL TAMBAH */}
             {showAddModal && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.8)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
                     <div style={{ background: 'var(--card-bg)', padding: '30px', borderRadius: 12, width: '100%', maxWidth: 500, boxShadow: 'var(--shadow-lg)' }}>
