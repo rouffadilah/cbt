@@ -189,6 +189,9 @@ export default function TabPengguna() {
         }
     };
 
+    // ==============================================================
+    // FILTER & PENGURUTAN (T DI ATAS H, E98 PALING ATAS)
+    // ==============================================================
     const guruUsers = users.filter(u => {
         const roleArr = Array.isArray(u.role) ? u.role : String(u.role || '').split(',');
         const isGmail = u.username && String(u.username).toLowerCase().includes('@');
@@ -197,8 +200,34 @@ export default function TabPengguna() {
         const roleDisplay = getRoleDisplay(u.role).toLowerCase();
         const mapel = getArrayString(u.mapel).toLowerCase();
         const kelas = getArrayString(u.kelas).toLowerCase();
-        return (u.username || "").toLowerCase().includes(fGuruId.toLowerCase()) && (u.nama || "").toLowerCase().includes(fGuruNama.toLowerCase()) && roleDisplay.includes(fGuruRole.toLowerCase()) && `${mapel} ${kelas}`.includes(fGuruDetail.toLowerCase());
-    }).sort((a, b) => (a.username || "").localeCompare(b.username || ""));
+        return (u.username || "").toLowerCase().includes(fGuruId.toLowerCase()) && 
+               (u.nama || "").toLowerCase().includes(fGuruNama.toLowerCase()) && 
+               roleDisplay.includes(fGuruRole.toLowerCase()) && 
+               `${mapel} ${kelas}`.includes(fGuruDetail.toLowerCase());
+    }).sort((a, b) => {
+        const kodeA = a.username || ""; 
+        const kodeB = b.username || "";
+
+        // 1. Aturan Tahun 1998 (Kode E98) Pindah ke Paling Atas
+        const is98A = kodeA.startsWith("E98");
+        const is98B = kodeB.startsWith("E98");
+        
+        if (is98A && !is98B) return -1;
+        if (!is98A && is98B) return 1;
+
+        // 2. Aturan Karyawan Tetap (T) lebih dulu dari Honorer (H)
+        // Mengecek karakter ke-4 (index 3) jika panjang kode cukup
+        if (kodeA.length >= 4 && kodeB.length >= 4) {
+            const statusA = kodeA.charAt(3).toUpperCase(); 
+            const statusB = kodeB.charAt(3).toUpperCase();
+
+            if (statusA === "T" && statusB === "H") return -1;
+            if (statusA === "H" && statusB === "T") return 1;
+        }
+
+        // 3. Pengurutan abjad/numerik standar
+        return kodeA.localeCompare(kodeB);
+    });
 
     const gmailUsers = users.filter(u => u.username && String(u.username).toLowerCase().includes('@') && (u.username || "").toLowerCase().includes(fGmailEmail.toLowerCase()) && (u.nama || "").toLowerCase().includes(fGmailNama.toLowerCase())).sort((a, b) => (a.username || "").localeCompare(b.username || ""));
 
