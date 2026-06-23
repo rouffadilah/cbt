@@ -143,7 +143,7 @@ export default function TabPengguna() {
     };
 
     // =========================================================================
-    // FILTER DAN SORTING GURU (DIJAMIN 100% TAHAN BANTING)
+    // FILTER DAN SORTING GURU (SUPER KETAT)
     // =========================================================================
     const guruUsers = users.filter(u => {
         const roleArr = Array.isArray(u.role) ? u.role : String(u.role || '').split(',');
@@ -163,33 +163,34 @@ export default function TabPengguna() {
         const idA = String(a.username || "").trim().toUpperCase();
         const idB = String(b.username || "").trim().toUpperCase();
 
-        // 1. E98 TETAP MUTLAK DI ATAS
-        if (idA.startsWith("E98") && !idB.startsWith("E98")) return -1;
-        if (!idA.startsWith("E98") && idB.startsWith("E98")) return 1;
+        // 1. ATURAN BESI: E98 HARUS SELALU DI ATAS
+        const isE98A = idA.includes("E98"); // Menggunakan includes untuk jaga-jaga ada spasi tersembunyi
+        const isE98B = idB.includes("E98");
 
-        // 2. BEDAH ID MENGGUNAKAN REGEX (Huruf - Tahun - Status - SisaAngka)
-        // Contoh: E24T1-193 -> Huruf: E, Tahun: 24, Status: T, SisaAngka: 1-193
+        if (isE98A && !isE98B) return -1; // A naik ke atas
+        if (!isE98A && isE98B) return 1;  // B naik ke atas
+
+        // 2. PECAH ID MENJADI KOMPONEN JIKA BUKAN KASUS E98 vs NON-E98
         const regex = /^([A-Z]+)(\d+)([A-Z]*)(.*)$/;
         const matchA = idA.match(regex);
         const matchB = idB.match(regex);
 
         if (matchA && matchB) {
-            // Bandingkan Huruf Depan (Misal: E vs F)
+            // Bandingkan Huruf Depan
             if (matchA[1] !== matchB[1]) return matchA[1].localeCompare(matchB[1]);
 
-            // Bandingkan Tahun (Misal: 24 vs 22) -> DESCENDING (Terbaru di Atas)
-            // Jika ingin tahun lama di atas, ubah menjadi: tahunA - tahunB
+            // Bandingkan Tahun (DESCENDING / TAHUN TERBARU DI ATAS)
             const tahunA = parseInt(matchA[2], 10);
             const tahunB = parseInt(matchB[2], 10);
             if (tahunA !== tahunB) return tahunB - tahunA; 
 
-            // Bandingkan Status T dan H (T pasti juara 1, H juara 2)
+            // Bandingkan Status (T pasti di atas H)
             const getStatusNilai = (status) => (status === 'T' ? 1 : status === 'H' ? 2 : 3);
             const statusA = getStatusNilai(matchA[3]);
             const statusB = getStatusNilai(matchB[3]);
             if (statusA !== statusB) return statusA - statusB;
 
-            // Bandingkan Sisa Angka (1-193 vs 10-002) agar T2 muncul sebelum T10
+            // Bandingkan Sisa Angka Urut Belakang (ASCENDING / 1 dulu baru 10)
             const extractNums = (str) => str.match(/\d+/g)?.map(Number) || [0];
             const numsA = extractNums(matchA[4]);
             const numsB = extractNums(matchB[4]);
@@ -197,11 +198,11 @@ export default function TabPengguna() {
             for (let i = 0; i < Math.max(numsA.length, numsB.length); i++) {
                 const nA = numsA[i] || 0;
                 const nB = numsB[i] || 0;
-                if (nA !== nB) return nA - nB; // ASCENDING untuk sisa angka urut
+                if (nA !== nB) return nA - nB; 
             }
         }
 
-        // Fallback jika format ID benar-benar aneh/tidak terduga
+        // Fallback terakhir
         return idA.localeCompare(idB, undefined, { numeric: true });
     });
 
