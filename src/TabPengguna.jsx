@@ -177,52 +177,55 @@ export default function TabPengguna() {
     };
 
     // ==============================================================
-    // FILTER & SYSTEM PENGURUTAN PRIORITAS BARU (T DI ATAS H, E98 TERATAS)
+    // PENGURUTAN FINAL: E98 DI ATAS, DAN PADA TAHUN YG SAMA T SEBELUM H
     // ==============================================================
     const guruUsers = users.filter(u => {
         const roleArr = Array.isArray(u.role) ? u.role : String(u.role || '').split(',');
         const isGmail = u.username && String(u.username).toLowerCase().includes('@');
         const isOnlySiswa = roleArr.length === 1 && roleArr[0].trim().toLowerCase() === 'siswa';
         if (isGmail || isOnlySiswa) return false;
+        
         const roleDisplay = getRoleDisplay(u.role).toLowerCase();
         const mapel = getArrayString(u.mapel).toLowerCase();
         const kelas = getArrayString(u.kelas).toLowerCase();
+        
         return (u.username || "").toLowerCase().includes(fGuruId.toLowerCase()) && 
                (u.nama || "").toLowerCase().includes(fGuruNama.toLowerCase()) && 
                roleDisplay.includes(fGuruRole.toLowerCase()) && 
                `${mapel} ${kelas}`.includes(fGuruDetail.toLowerCase());
     }).sort((a, b) => {
-        const kodeA = (a.username || "").trim();
-        const kodeB = (b.username || "").trim();
+        const kodeA = (a.username || "").trim().toUpperCase();
+        const kodeB = (b.username || "").trim().toUpperCase();
 
-        // Fungsi internal untuk menghitung bobot urutan (Semakin kecil nilainya, semakin di atas)
-        const dapatkanBobotPrioritas = (kode) => {
-            // Cek jika akun dari angkatan 1998 (E98)
-            if (kode.startsWith("E98")) {
-                if (kode.length >= 4 && kode.charAt(3).toUpperCase() === "T") return 1; // E98 Tetap
-                if (kode.length >= 4 && kode.charAt(3).toUpperCase() === "H") return 2; // E98 Honorer
-                return 3; // E98 Lainnya
-            }
-            
-            // Cek untuk kode tahun lainnya (misal E24)
+        // 1. E98 Wajib Paling Atas
+        const is98A = kodeA.startsWith("E98");
+        const is98B = kodeB.startsWith("E98");
+        
+        if (is98A && !is98B) return -1;
+        if (!is98A && is98B) return 1;
+
+        // 2. Manipulasi string "virtual" khusus untuk diadu agar T urut lebih dulu dari H
+        // Di alfabet standar: H < T. Agar T selalu muncul di atas H pada tahun angkatan yang sama, 
+        // kita ganti nilai 'T' jadi '1' dan 'H' jadi '2' (hanya saat pengurutan).
+        const generateSortKey = (kode) => {
             if (kode.length >= 4) {
-                const statusKaryawan = kode.charAt(3).toUpperCase();
-                if (statusKaryawan === "T") return 4; // Tetap (Selalu di atas Honorer)
-                if (statusKaryawan === "H") return 5; // Honorer
+                const prefix = kode.substring(0, 3); // misal: E24
+                const status = kode.charAt(3);       // misal: T atau H
+                const suffix = kode.substring(4);    // sisa kode
+                
+                let sortStatus = status;
+                if (status === 'T') sortStatus = '1';      // 1 menang atas 2, jadi T selalu di atas H
+                else if (status === 'H') sortStatus = '2'; 
+                
+                return prefix + sortStatus + suffix;
             }
-            return 6; // Kode tidak sesuai format standar
+            return kode;
         };
 
-        const bobotA = dapatkanBobotPrioritas(kodeA);
-        const bobotB = dapatkanBobotPrioritas(kodeB);
+        const keyA = generateSortKey(kodeA);
+        const keyB = generateSortKey(kodeB);
 
-        // Jika bobot prioritas berbeda, urutkan berdasarkan bobot terkecil
-        if (bobotA !== bobotB) {
-            return bobotA - bobotB;
-        }
-
-        // Jika bobotnya sama (Sama-sama Tetap, atau Sama-sama Honorer), urutkan secara alfabetis normal
-        return kodeA.localeCompare(kodeB);
+        return keyA.localeCompare(keyB);
     });
 
     const gmailUsers = users.filter(u => u.username && String(u.username).toLowerCase().includes('@') && (u.username || "").toLowerCase().includes(fGmailEmail.toLowerCase()) && (u.nama || "").toLowerCase().includes(fGmailNama.toLowerCase())).sort((a, b) => (a.username || "").localeCompare(b.username || ""));
