@@ -160,55 +160,40 @@ export default function TabPengguna() {
                roleDisplay.includes(fGuruRole.toLowerCase()) && 
                `${mapel} ${kelas}`.includes(fGuruDetail.toLowerCase());
     }).sort((a, b) => {
-        const kodeA = (a.username || "").trim().toUpperCase();
-        const kodeB = (b.username || "").trim().toUpperCase();
+        const idA = (a.username || "").trim().toUpperCase();
+        const idB = (b.username || "").trim().toUpperCase();
 
-        // 1. ATURAN MUTLAK: E98 harus selalu di atas segalanya
-        const is98A = kodeA.startsWith("E98");
-        const is98B = kodeB.startsWith("E98");
-        if (is98A && !is98B) return -1;
-        if (!is98A && is98B) return 1;
+        // 1. PRIORITAS MUTLAK: E98 selalu di urutan 0 (Teratas)
+        const is98A = idA.startsWith("E98") ? 0 : 1;
+        const is98B = idB.startsWith("E98") ? 0 : 1;
+        if (is98A !== is98B) return is98A - is98B;
 
-        // 2. Gunakan Regex untuk memecah ID menjadi 3 bagian:
-        // Contoh: "E24T6-585" -> Prefix: "E24", Status: "T", Suffix: "6-585"
-        const matchA = kodeA.match(/^([A-Z]\d{2})([T|H]?)(.*)$/);
-        const matchB = kodeB.match(/^([A-Z]\d{2})([T|H]?)(.*)$/);
-
-        if (matchA && matchB) {
-            const prefixA = matchA[1]; // misal E06, E24
-            const statusA = matchA[2]; // misal T, H, atau kosong
-            const suffixA = matchA[3]; // misal 7-256
-
-            const prefixB = matchB[1];
-            const statusB = matchB[2];
-            const suffixB = matchB[3];
-
-            // 3. Bandingkan Prefix Tahun Terlebih Dahulu (E06 vs E24)
-            if (prefixA !== prefixB) {
-                return prefixA.localeCompare(prefixB);
-            }
-
-            // 4. Jika Prefix sama (Misal sama-sama E24), Bandingkan Status T dan H
-            // Kita beri bobot: T=1 (Juara 1), H=2 (Juara 2), Kosong=3
-            const getStatusWeight = (status) => {
-                if (status === 'T') return 1;
-                if (status === 'H') return 2;
-                return 3;
+        // 2. Fungsi pemecah ID (Prefix, Status, Suffix)
+        const parseId = (id) => {
+            const match = id.match(/^([A-Z]\d{2})([TH]?)(.*)$/);
+            if (!match) return { prefix: id, weight: 3, suffix: "" };
+            return {
+                prefix: match[1], // Contoh: E22, E24
+                weight: match[2] === 'T' ? 1 : (match[2] === 'H' ? 2 : 3), // Bobot: T(1) > H(2)
+                suffix: match[3]  // Sisa nomor seri
             };
+        };
 
-            const weightA = getStatusWeight(statusA);
-            const weightB = getStatusWeight(statusB);
+        const partA = parseId(idA);
+        const partB = parseId(idB);
 
-            if (weightA !== weightB) {
-                return weightA - weightB; // Yg angkanya kecil (1/T) otomatis naik ke atas
-            }
-
-            // 5. Jika Prefix dan Status sama, urutkan angka/huruf sisanya secara natural
-            return suffixA.localeCompare(suffixB, undefined, { numeric: true });
+        // 3. Bandingkan Tahun/Prefix (E22 muncul sebelum E24)
+        if (partA.prefix !== partB.prefix) {
+            return partA.prefix.localeCompare(partB.prefix);
         }
 
-        // Fallback jika ID tidak sesuai pola Exx... (Mencegah error)
-        return kodeA.localeCompare(kodeB, undefined, { numeric: true });
+        // 4. Jika Tahun sama, bandingkan Bobot Status (T pasti di atas H)
+        if (partA.weight !== partB.weight) {
+            return partA.weight - partB.weight;
+        }
+
+        // 5. Jika Tahun dan Status sama, urutkan sisa nomor seri di belakangnya
+        return partA.suffix.localeCompare(partB.suffix, undefined, { numeric: true });
     });
 
     const gmailUsers = users.filter(u => u.username && String(u.username).toLowerCase().includes('@') && (u.username || "").toLowerCase().includes(fGmailEmail.toLowerCase()) && (u.nama || "").toLowerCase().includes(fGmailNama.toLowerCase())).sort((a, b) => (a.username || "").localeCompare(b.username || ""));
