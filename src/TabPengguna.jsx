@@ -4,22 +4,6 @@ import { db } from './firebase-config';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 
-// Fungsi bantuan diletakkan di luar komponen agar memori lebih efisien & tidak memicu eror re-render
-const generateSortKey = (kode) => {
-    if (kode && kode.length >= 4) {
-        const prefix = kode.substring(0, 3); // Contoh: E24
-        const status = kode.charAt(3);       // Contoh: T atau H
-        const suffix = kode.substring(4);    // Sisa kode di belakangnya
-        
-        let sortStatus = status;
-        if (status === 'T') sortStatus = '1';      // Angka 1 menang atas 2, sehingga T naik ke atas H
-        else if (status === 'H') sortStatus = '2'; 
-        
-        return prefix + sortStatus + suffix;
-    }
-    return kode || "";
-};
-
 export default function TabPengguna() {
     const navigate = useNavigate();
     const [users, setUsers] = useState([]);
@@ -47,14 +31,11 @@ export default function TabPengguna() {
 
     const [showAddModal, setShowAddModal] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
-    const [excelFile, setExcelFile] = useState(null);
-    const [spreadsheetLink, setSpreadsheetLink] = useState('');
     const [newUserData, setNewUserData] = useState({ 
         username: '', nama: '', password: '', role: 'siswa', mapel: '', kelas: '' 
     });
 
     useEffect(() => {
-        // PELINDUNG EROR: Mengamankan pembacaan userRole dari localStorage agar tidak crash
         try {
             const storedRole = localStorage.getItem("userRole");
             if (storedRole) {
@@ -114,23 +95,6 @@ export default function TabPengguna() {
         }
     };
 
-    const prosesJsonKeFirebase = async (json) => {
-        let count = 0;
-        for (const row of json) {
-            if (row.Username && row.Nama) {
-                const roleArr = row.Role ? String(row.Role).split(',').map(s=>s.trim()) : ['siswa'];
-                const mapelArr = row.Mapel ? String(row.Mapel).split(',').map(s=>s.trim()) : [];
-                const kelasArr = row.Kelas ? String(row.Kelas).split(',').map(s=>s.trim()) : [];
-                await setDoc(doc(db, "users", String(row.Username)), {
-                    username: String(row.Username), nama: String(row.Nama), password: String(row.Password || '123456'),
-                    role: roleArr, mapel: mapelArr, kelas: kelasArr
-                });
-                count++;
-            }
-        }
-        return count;
-    };
-
     const handleOpenEdit = (user) => {
         setEditData({
             uid: user.uid, username: user.username || '', nama: user.nama || '',
@@ -169,7 +133,7 @@ export default function TabPengguna() {
         try {
             await deleteDoc(doc(db, "users", editData.uid));
             setUsers(prevUsers => prevUsers.filter(user => user.uid !== editData.uid));
-            alert("Akun berhasil deleted!"); 
+            alert("Akun berhasil dihapus!"); 
             setShowEditModal(false); 
         } catch (error) { 
             alert(`Gagal menghapus: ${error.message}`); 
@@ -178,7 +142,9 @@ export default function TabPengguna() {
         }
     };
 
-    // FILTER DAN SORTING GURU
+    // =========================================================================
+    // FILTER DAN SORTING GURU (DIJAMIN 100% E98 DI ATAS & T SEBELUM H)
+    // =========================================================================
     const guruUsers = users.filter(u => {
         const roleArr = Array.isArray(u.role) ? u.role : String(u.role || '').split(',');
         const isGmail = u.username && String(u.username).toLowerCase().includes('@');
@@ -197,16 +163,52 @@ export default function TabPengguna() {
         const kodeA = (a.username || "").trim().toUpperCase();
         const kodeB = (b.username || "").trim().toUpperCase();
 
-        // 1. E98 Wajib Di Atas Sendiri
+        // 1. ATURAN MUTLAK: E98 harus selalu di atas segalanya
         const is98A = kodeA.startsWith("E98");
         const is98B = kodeB.startsWith("E98");
         if (is98A && !is98B) return -1;
         if (!is98A && is98B) return 1;
 
-        // 2. Urut Berdasarkan Rekayasa Huruf T dan H
-        const keyA = generateSortKey(kodeA);
-        const keyB = generateSortKey(kodeB);
-        return keyA.localeCompare(keyB);
+        // 2. Gunakan Regex untuk memecah ID menjadi 3 bagian:
+        // Contoh: "E24T6-585" -> Prefix: "E24", Status: "T", Suffix: "6-585"
+        const matchA = kodeA.match(/^([A-Z]\d{2})([T|H]?)(.*)$/);
+        const matchB = kodeB.match(/^([A-Z]\d{2})([T|H]?)(.*)$/);
+
+        if (matchA && matchB) {
+            const prefixA = matchA[1]; // misal E06, E24
+            const statusA = matchA[2]; // misal T, H, atau kosong
+            const suffixA = matchA[3]; // misal 7-256
+
+            const prefixB = matchB[1];
+            const statusB = matchB[2];
+            const suffixB = matchB[3];
+
+            // 3. Bandingkan Prefix Tahun Terlebih Dahulu (E06 vs E24)
+            if (prefixA !== prefixB) {
+                return prefixA.localeCompare(prefixB);
+            }
+
+            // 4. Jika Prefix sama (Misal sama-sama E24), Bandingkan Status T dan H
+            // Kita beri bobot: T=1 (Juara 1), H=2 (Juara 2), Kosong=3
+            const getStatusWeight = (status) => {
+                if (status === 'T') return 1;
+                if (status === 'H') return 2;
+                return 3;
+            };
+
+            const weightA = getStatusWeight(statusA);
+            const weightB = getStatusWeight(statusB);
+
+            if (weightA !== weightB) {
+                return weightA - weightB; // Yg angkanya kecil (1/T) otomatis naik ke atas
+            }
+
+            // 5. Jika Prefix dan Status sama, urutkan angka/huruf sisanya secara natural
+            return suffixA.localeCompare(suffixB, undefined, { numeric: true });
+        }
+
+        // Fallback jika ID tidak sesuai pola Exx... (Mencegah error)
+        return kodeA.localeCompare(kodeB, undefined, { numeric: true });
     });
 
     const gmailUsers = users.filter(u => u.username && String(u.username).toLowerCase().includes('@') && (u.username || "").toLowerCase().includes(fGmailEmail.toLowerCase()) && (u.nama || "").toLowerCase().includes(fGmailNama.toLowerCase())).sort((a, b) => (a.username || "").localeCompare(b.username || ""));
