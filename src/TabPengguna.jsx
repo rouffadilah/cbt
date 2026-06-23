@@ -143,7 +143,7 @@ export default function TabPengguna() {
     };
 
     // =========================================================================
-    // FILTER DAN SORTING GURU (DIJAMIN 100% E98 DI ATAS & T SEBELUM H)
+    // FILTER DAN SORTING GURU (DIJAMIN 100% TAHAN BANTING)
     // =========================================================================
     const guruUsers = users.filter(u => {
         const roleArr = Array.isArray(u.role) ? u.role : String(u.role || '').split(',');
@@ -160,40 +160,49 @@ export default function TabPengguna() {
                roleDisplay.includes(fGuruRole.toLowerCase()) && 
                `${mapel} ${kelas}`.includes(fGuruDetail.toLowerCase());
     }).sort((a, b) => {
-        const idA = (a.username || "").trim().toUpperCase();
-        const idB = (b.username || "").trim().toUpperCase();
+        const idA = String(a.username || "").trim().toUpperCase();
+        const idB = String(b.username || "").trim().toUpperCase();
 
-        // 1. PRIORITAS MUTLAK: E98 selalu di urutan 0 (Teratas)
-        const is98A = idA.startsWith("E98") ? 0 : 1;
-        const is98B = idB.startsWith("E98") ? 0 : 1;
-        if (is98A !== is98B) return is98A - is98B;
+        // 1. E98 TETAP MUTLAK DI ATAS
+        if (idA.startsWith("E98") && !idB.startsWith("E98")) return -1;
+        if (!idA.startsWith("E98") && idB.startsWith("E98")) return 1;
 
-        // 2. Fungsi pemecah ID (Prefix, Status, Suffix)
-        const parseId = (id) => {
-            const match = id.match(/^([A-Z]\d{2})([TH]?)(.*)$/);
-            if (!match) return { prefix: id, weight: 3, suffix: "" };
-            return {
-                prefix: match[1], // Contoh: E22, E24
-                weight: match[2] === 'T' ? 1 : (match[2] === 'H' ? 2 : 3), // Bobot: T(1) > H(2)
-                suffix: match[3]  // Sisa nomor seri
-            };
-        };
+        // 2. BEDAH ID MENGGUNAKAN REGEX (Huruf - Tahun - Status - SisaAngka)
+        // Contoh: E24T1-193 -> Huruf: E, Tahun: 24, Status: T, SisaAngka: 1-193
+        const regex = /^([A-Z]+)(\d+)([A-Z]*)(.*)$/;
+        const matchA = idA.match(regex);
+        const matchB = idB.match(regex);
 
-        const partA = parseId(idA);
-        const partB = parseId(idB);
+        if (matchA && matchB) {
+            // Bandingkan Huruf Depan (Misal: E vs F)
+            if (matchA[1] !== matchB[1]) return matchA[1].localeCompare(matchB[1]);
 
-        // 3. Bandingkan Tahun/Prefix (E22 muncul sebelum E24)
-        if (partA.prefix !== partB.prefix) {
-            return partA.prefix.localeCompare(partB.prefix);
+            // Bandingkan Tahun (Misal: 24 vs 22) -> DESCENDING (Terbaru di Atas)
+            // Jika ingin tahun lama di atas, ubah menjadi: tahunA - tahunB
+            const tahunA = parseInt(matchA[2], 10);
+            const tahunB = parseInt(matchB[2], 10);
+            if (tahunA !== tahunB) return tahunB - tahunA; 
+
+            // Bandingkan Status T dan H (T pasti juara 1, H juara 2)
+            const getStatusNilai = (status) => (status === 'T' ? 1 : status === 'H' ? 2 : 3);
+            const statusA = getStatusNilai(matchA[3]);
+            const statusB = getStatusNilai(matchB[3]);
+            if (statusA !== statusB) return statusA - statusB;
+
+            // Bandingkan Sisa Angka (1-193 vs 10-002) agar T2 muncul sebelum T10
+            const extractNums = (str) => str.match(/\d+/g)?.map(Number) || [0];
+            const numsA = extractNums(matchA[4]);
+            const numsB = extractNums(matchB[4]);
+            
+            for (let i = 0; i < Math.max(numsA.length, numsB.length); i++) {
+                const nA = numsA[i] || 0;
+                const nB = numsB[i] || 0;
+                if (nA !== nB) return nA - nB; // ASCENDING untuk sisa angka urut
+            }
         }
 
-        // 4. Jika Tahun sama, bandingkan Bobot Status (T pasti di atas H)
-        if (partA.weight !== partB.weight) {
-            return partA.weight - partB.weight;
-        }
-
-        // 5. Jika Tahun dan Status sama, urutkan sisa nomor seri di belakangnya
-        return partA.suffix.localeCompare(partB.suffix, undefined, { numeric: true });
+        // Fallback jika format ID benar-benar aneh/tidak terduga
+        return idA.localeCompare(idB, undefined, { numeric: true });
     });
 
     const gmailUsers = users.filter(u => u.username && String(u.username).toLowerCase().includes('@') && (u.username || "").toLowerCase().includes(fGmailEmail.toLowerCase()) && (u.nama || "").toLowerCase().includes(fGmailNama.toLowerCase())).sort((a, b) => (a.username || "").localeCompare(b.username || ""));
