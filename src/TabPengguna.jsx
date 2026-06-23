@@ -4,6 +4,22 @@ import { db } from './firebase-config';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 
+// Fungsi bantuan diletakkan di luar komponen agar memori lebih efisien & tidak memicu eror re-render
+const generateSortKey = (kode) => {
+    if (kode && kode.length >= 4) {
+        const prefix = kode.substring(0, 3); // Contoh: E24
+        const status = kode.charAt(3);       // Contoh: T atau H
+        const suffix = kode.substring(4);    // Sisa kode di belakangnya
+        
+        let sortStatus = status;
+        if (status === 'T') sortStatus = '1';      // Angka 1 menang atas 2, sehingga T naik ke atas H
+        else if (status === 'H') sortStatus = '2'; 
+        
+        return prefix + sortStatus + suffix;
+    }
+    return kode || "";
+};
+
 export default function TabPengguna() {
     const navigate = useNavigate();
     const [users, setUsers] = useState([]);
@@ -30,7 +46,6 @@ export default function TabPengguna() {
     const [isSaving, setIsSaving] = useState(false);
 
     const [showAddModal, setShowAddModal] = useState(false);
-    const [addMethod, setAddMethod] = useState('manual');
     const [isAdding, setIsAdding] = useState(false);
     const [excelFile, setExcelFile] = useState(null);
     const [spreadsheetLink, setSpreadsheetLink] = useState('');
@@ -39,8 +54,21 @@ export default function TabPengguna() {
     });
 
     useEffect(() => {
-        const roles = JSON.parse(localStorage.getItem("userRole") || "[]");
-        setIsAdmin(roles.includes("admin"));
+        // PELINDUNG EROR: Mengamankan pembacaan userRole dari localStorage agar tidak crash
+        try {
+            const storedRole = localStorage.getItem("userRole");
+            if (storedRole) {
+                if (storedRole.startsWith("[")) {
+                    const rolesArray = JSON.parse(storedRole);
+                    setIsAdmin(rolesArray.includes("admin"));
+                } else {
+                    setIsAdmin(storedRole.trim().toLowerCase() === "admin");
+                }
+            }
+        } catch (error) {
+            console.error("Gagal membaca role login:", error);
+            setIsAdmin(false);
+        }
         fetchUsers();
     }, []);
 
@@ -53,7 +81,11 @@ export default function TabPengguna() {
                 usersData.push({ uid: doc.id, ...doc.data() });
             });
             setUsers(usersData);
-        } catch (error) { console.error(error); } finally { setLoading(false); }
+        } catch (error) { 
+            console.error(error); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     const getRoleDisplay = (roleData) => Array.isArray(roleData) ? roleData.join(", ") : (roleData || "-");
@@ -75,17 +107,11 @@ export default function TabPengguna() {
             setShowAddModal(false);
             setNewUserData({ username: '', nama: '', password: '', role: 'siswa', mapel: '', kelas: '' });
             fetchUsers();
-        } catch (error) { alert("Gagal menambahkan: " + error.message); } finally { setIsAdding(false); }
-    };
-
-    const handleDownloadTemplate = () => {
-        const wsData = [
-            { Username: "10101", Nama: "Ahmad Siswa", Password: "password123", Role: "siswa", Mapel: "", Kelas: "X-1" }
-        ];
-        const ws = XLSX.utils.json_to_sheet(wsData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Format_Akun");
-        XLSX.writeFile(wb, "Template_Import_Akun.xlsx");
+        } catch (error) { 
+            alert("Gagal menambahkan: " + error.message); 
+        } finally { 
+            setIsAdding(false); 
+        }
     };
 
     const prosesJsonKeFirebase = async (json) => {
@@ -105,41 +131,6 @@ export default function TabPengguna() {
         return count;
     };
 
-    const handleUploadExcel = async () => {
-        if (!excelFile) return alert("Pilih file Excel terlebih dahulu!");
-        setIsAdding(true);
-        try {
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                const json = XLSX.utils.sheet_to_json(worksheet);
-                const count = await prosesJsonKeFirebase(json);
-                alert(`Berhasil mengimpor ${count} pengguna dari Excel!`);
-                setShowAddModal(false); setExcelFile(null); fetchUsers(); setIsAdding(false);
-            };
-            reader.readAsArrayBuffer(excelFile);
-        } catch (error) { alert("Kesalahan membaca file: " + error.message); setIsAdding(false); }
-    };
-
-    const handleImportSpreadsheet = async () => {
-        if (!spreadsheetLink) return alert("Masukkan link Spreadsheet!");
-        const match = spreadsheetLink.match(/\/d\/([a-zA-Z0-9-_]+)/);
-        if (!match) return alert("Link tidak valid.");
-        setIsAdding(true);
-        try {
-            const response = await fetch(`https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv`);
-            if (!response.ok) throw new Error("Akses Ditolak.");
-            const csvText = await response.text();
-            const workbook = XLSX.read(csvText, { type: 'string' });
-            const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-            const count = await prosesJsonKeFirebase(json);
-            alert(`Berhasil mengimpor ${count} pengguna dari Spreadsheet!`);
-            setShowAddModal(false); setSpreadsheetLink(''); fetchUsers();
-        } catch (error) { alert("GAGAL MENGAKSES DATA!"); } finally { setIsAdding(false); }
-    };
-
     const handleOpenEdit = (user) => {
         setEditData({
             uid: user.uid, username: user.username || '', nama: user.nama || '',
@@ -153,16 +144,23 @@ export default function TabPengguna() {
         setIsSaving(true);
         try {
             const userRef = doc(db, "users", editData.uid);
+            const rArr = editData.role.split(',').map(s => s.trim()).filter(s => s);
+            const mArr = editData.mapel.split(',').map(s => s.trim()).filter(s => s);
+            const kArr = editData.kelas.split(',').map(s => s.trim()).filter(s => s);
+
             await updateDoc(userRef, {
                 username: editData.username, nama: editData.nama, 
-                role: editData.role.split(',').map(s => s.trim()).filter(s => s), 
-                mapel: editData.mapel.split(',').map(s => s.trim()).filter(s => s), 
-                kelas: editData.kelas.split(',').map(s => s.trim()).filter(s => s)
+                role: rArr, mapel: mArr, kelas: kArr
             });
-            setUsers(prevUsers => prevUsers.map(u => u.uid === editData.uid ? { ...u, username: editData.username, nama: editData.nama, role: editData.role.split(',').map(s => s.trim()).filter(s => s), mapel: editData.mapel.split(',').map(s => s.trim()).filter(s => s), kelas: editData.kelas.split(',').map(s => s.trim()).filter(s => s) } : u));
+            
+            setUsers(prevUsers => prevUsers.map(u => u.uid === editData.uid ? { ...u, username: editData.username, nama: editData.nama, role: rArr, mapel: mArr, kelas: kArr } : u));
             alert("Data diperbarui!"); 
             setShowEditModal(false); 
-        } catch (error) { alert("Gagal: " + error.message); } finally { setIsSaving(false); }
+        } catch (error) { 
+            alert("Gagal: " + error.message); 
+        } finally { 
+            setIsSaving(false); 
+        }
     };
 
     const handleDeleteFromModal = async () => {
@@ -171,14 +169,16 @@ export default function TabPengguna() {
         try {
             await deleteDoc(doc(db, "users", editData.uid));
             setUsers(prevUsers => prevUsers.filter(user => user.uid !== editData.uid));
-            alert("Akun berhasil dihapus!"); 
+            alert("Akun berhasil deleted!"); 
             setShowEditModal(false); 
-        } catch (error) { alert(`Gagal menghapus: ${error.message}`); } finally { setIsSaving(false); }
+        } catch (error) { 
+            alert(`Gagal menghapus: ${error.message}`); 
+        } finally { 
+            setIsSaving(false); 
+        }
     };
 
-    // ==============================================================
-    // PENGURUTAN FINAL: E98 DI ATAS, DAN PADA TAHUN YG SAMA T SEBELUM H
-    // ==============================================================
+    // FILTER DAN SORTING GURU
     const guruUsers = users.filter(u => {
         const roleArr = Array.isArray(u.role) ? u.role : String(u.role || '').split(',');
         const isGmail = u.username && String(u.username).toLowerCase().includes('@');
@@ -197,34 +197,15 @@ export default function TabPengguna() {
         const kodeA = (a.username || "").trim().toUpperCase();
         const kodeB = (b.username || "").trim().toUpperCase();
 
-        // 1. E98 Wajib Paling Atas
+        // 1. E98 Wajib Di Atas Sendiri
         const is98A = kodeA.startsWith("E98");
         const is98B = kodeB.startsWith("E98");
-        
         if (is98A && !is98B) return -1;
         if (!is98A && is98B) return 1;
 
-        // 2. Manipulasi string "virtual" khusus untuk diadu agar T urut lebih dulu dari H
-        // Di alfabet standar: H < T. Agar T selalu muncul di atas H pada tahun angkatan yang sama, 
-        // kita ganti nilai 'T' jadi '1' dan 'H' jadi '2' (hanya saat pengurutan).
-        const generateSortKey = (kode) => {
-            if (kode.length >= 4) {
-                const prefix = kode.substring(0, 3); // misal: E24
-                const status = kode.charAt(3);       // misal: T atau H
-                const suffix = kode.substring(4);    // sisa kode
-                
-                let sortStatus = status;
-                if (status === 'T') sortStatus = '1';      // 1 menang atas 2, jadi T selalu di atas H
-                else if (status === 'H') sortStatus = '2'; 
-                
-                return prefix + sortStatus + suffix;
-            }
-            return kode;
-        };
-
+        // 2. Urut Berdasarkan Rekayasa Huruf T dan H
         const keyA = generateSortKey(kodeA);
         const keyB = generateSortKey(kodeB);
-
         return keyA.localeCompare(keyB);
     });
 
@@ -251,7 +232,7 @@ export default function TabPengguna() {
                 <div style={{ padding: 25, background: 'var(--card-bg)' }}>
                     {loading ? <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}><i className="fas fa-spinner fa-spin fa-2x"></i> Memuat data...</div> : (
                         <>
-                            {/* GURU */}
+                            {/* TABEL GURU */}
                             <div className="toggle-accordion" onClick={() => setOpenGuru(!openGuru)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, cursor: 'pointer', padding: 10, background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 8 }}>
                                 <h4 style={{ margin: 0, color: '#0ea5e9', fontSize: '1.05rem' }}><i className="fas fa-chalkboard-teacher"></i> Akun Guru & Staf ({guruUsers.length})</h4>
                                 <i className="fas fa-chevron-up toggle-icon" style={{ transition: '0.3s', transform: openGuru ? 'rotate(0deg)' : 'rotate(180deg)', color: 'var(--text-muted)' }}></i>
@@ -279,7 +260,7 @@ export default function TabPengguna() {
                                 </div>
                             )}
 
-                            {/* GMAIL */}
+                            {/* TABEL GMAIL */}
                             <div className="toggle-accordion" onClick={() => setOpenGmail(!openGmail)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, cursor: 'pointer', padding: 10, background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 8 }}>
                                 <h4 style={{ margin: 0, color: '#ef4444', fontSize: '1.05rem' }}><i className="fab fa-google"></i> Akun Google / Gmail ({gmailUsers.length})</h4>
                                 <i className="fas fa-chevron-up toggle-icon" style={{ transition: '0.3s', transform: openGmail ? 'rotate(0deg)' : 'rotate(180deg)', color: 'var(--text-muted)' }}></i>
@@ -305,7 +286,7 @@ export default function TabPengguna() {
                                 </div>
                             )}
 
-                            {/* SISWA */}
+                            {/* TABEL SISWA */}
                             <div className="toggle-accordion" onClick={() => setOpenSiswa(!openSiswa)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, cursor: 'pointer', padding: 10, background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 8 }}>
                                 <h4 style={{ margin: 0, color: '#10b981', fontSize: '1.05rem' }}><i className="fas fa-user-graduate"></i> Akun Siswa ({siswaUsers.length})</h4>
                                 <i className="fas fa-chevron-up toggle-icon" style={{ transition: '0.3s', transform: openSiswa ? 'rotate(0deg)' : 'rotate(180deg)', color: 'var(--text-muted)' }}></i>
@@ -346,7 +327,7 @@ export default function TabPengguna() {
                             <button onClick={() => setShowEditModal(false)} style={{ background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--text-muted)' }}>&times;</button>
                         </div>
                         <form onSubmit={handleSaveEdit}>
-                            <div style={{ marginBottom: 15 }}><label style={{ display: 'block', marginBottom: 5, fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-main)' }}>Username / NIS</label><input type="text" className="input-text" value={editData.username} onChange={e => setEditData({...editData, username: e.target.value})} required disabled={editData.username.includes('@')} style={{ width: '100%', padding: '10px' }} /></div>
+                            <div style={{ marginBottom: 15 }}><label style={{ display: 'block', marginBottom: 5, fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-main)' }}>Username / NIS</label><input type="text" className="input-text" value={editData.username} onChange={e => setEditData({...editData, username: e.target.value})} required disabled={editData.username && editData.username.includes('@')} style={{ width: '100%', padding: '10px' }} /></div>
                             <div style={{ marginBottom: 15 }}><label style={{ display: 'block', marginBottom: 5, fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-main)' }}>Nama Lengkap</label><input type="text" className="input-text" value={editData.nama} onChange={e => setEditData({...editData, nama: e.target.value})} required style={{ width: '100%', padding: '10px' }} /></div>
                             <div style={{ marginBottom: 15 }}><label style={{ display: 'block', marginBottom: 5, fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-main)' }}>Role</label><input type="text" className="input-text" value={editData.role} onChange={e => setEditData({...editData, role: e.target.value})} required style={{ width: '100%', padding: '10px' }} /></div>
                             <div style={{ marginBottom: 15 }}><label style={{ display: 'block', marginBottom: 5, fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-main)' }}>Mapel</label><input type="text" className="input-text" value={editData.mapel} onChange={e => setEditData({...editData, mapel: e.target.value})} style={{ width: '100%', padding: '10px' }} /></div>
