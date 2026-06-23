@@ -159,38 +159,25 @@ export default function TabPengguna() {
                 mapel: editData.mapel.split(',').map(s => s.trim()).filter(s => s), 
                 kelas: editData.kelas.split(',').map(s => s.trim()).filter(s => s)
             });
-            // Update UI secara instan
             setUsers(prevUsers => prevUsers.map(u => u.uid === editData.uid ? { ...u, username: editData.username, nama: editData.nama, role: editData.role.split(',').map(s => s.trim()).filter(s => s), mapel: editData.mapel.split(',').map(s => s.trim()).filter(s => s), kelas: editData.kelas.split(',').map(s => s.trim()).filter(s => s) } : u));
             alert("Data diperbarui!"); 
             setShowEditModal(false); 
         } catch (error) { alert("Gagal: " + error.message); } finally { setIsSaving(false); }
     };
 
-    // ==========================================
-    // FUNGSI PENGHAPUSAN BARU (INSTAN SINKRON)
-    // ==========================================
     const handleDeleteFromModal = async () => {
-        if (!window.confirm("Yakin ingin menghapus pengguna ini dari database secara permanen?\n\nCatatan: Jika pengguna ini mencoba login lagi, sistem otomatis akan menendang mereka karena datanya kosong.")) return;
-        
+        if (!window.confirm("Yakin ingin menghapus pengguna ini dari database secara permanen?")) return;
         setIsSaving(true);
         try {
-            // Hapus dokumen di Firestore
             await deleteDoc(doc(db, "users", editData.uid));
-            
-            // Perbarui array 'users' di state agar tabel langsung menghilang tanpa perlu reload
             setUsers(prevUsers => prevUsers.filter(user => user.uid !== editData.uid));
-            
-            alert("Akun berhasil dihapus dari database!"); 
+            alert("Akun berhasil dihapus!"); 
             setShowEditModal(false); 
-        } catch (error) { 
-            alert(`Gagal menghapus: ${error.message}`); 
-        } finally { 
-            setIsSaving(false); 
-        }
+        } catch (error) { alert(`Gagal menghapus: ${error.message}`); } finally { setIsSaving(false); }
     };
 
     // ==============================================================
-    // FILTER & PENGURUTAN (T DI ATAS H, E98 PALING ATAS)
+    // FILTER & SYSTEM PENGURUTAN PRIORITAS BARU (T DI ATAS H, E98 TERATAS)
     // ==============================================================
     const guruUsers = users.filter(u => {
         const roleArr = Array.isArray(u.role) ? u.role : String(u.role || '').split(',');
@@ -205,27 +192,36 @@ export default function TabPengguna() {
                roleDisplay.includes(fGuruRole.toLowerCase()) && 
                `${mapel} ${kelas}`.includes(fGuruDetail.toLowerCase());
     }).sort((a, b) => {
-        const kodeA = a.username || ""; 
-        const kodeB = b.username || "";
+        const kodeA = (a.username || "").trim();
+        const kodeB = (b.username || "").trim();
 
-        // 1. Aturan Tahun 1998 (Kode E98) Pindah ke Paling Atas
-        const is98A = kodeA.startsWith("E98");
-        const is98B = kodeB.startsWith("E98");
-        
-        if (is98A && !is98B) return -1;
-        if (!is98A && is98B) return 1;
+        // Fungsi internal untuk menghitung bobot urutan (Semakin kecil nilainya, semakin di atas)
+        const dapatkanBobotPrioritas = (kode) => {
+            // Cek jika akun dari angkatan 1998 (E98)
+            if (kode.startsWith("E98")) {
+                if (kode.length >= 4 && kode.charAt(3).toUpperCase() === "T") return 1; // E98 Tetap
+                if (kode.length >= 4 && kode.charAt(3).toUpperCase() === "H") return 2; // E98 Honorer
+                return 3; // E98 Lainnya
+            }
+            
+            // Cek untuk kode tahun lainnya (misal E24)
+            if (kode.length >= 4) {
+                const statusKaryawan = kode.charAt(3).toUpperCase();
+                if (statusKaryawan === "T") return 4; // Tetap (Selalu di atas Honorer)
+                if (statusKaryawan === "H") return 5; // Honorer
+            }
+            return 6; // Kode tidak sesuai format standar
+        };
 
-        // 2. Aturan Karyawan Tetap (T) lebih dulu dari Honorer (H)
-        // Mengecek karakter ke-4 (index 3) jika panjang kode cukup
-        if (kodeA.length >= 4 && kodeB.length >= 4) {
-            const statusA = kodeA.charAt(3).toUpperCase(); 
-            const statusB = kodeB.charAt(3).toUpperCase();
+        const bobotA = dapatkanBobotPrioritas(kodeA);
+        const bobotB = dapatkanBobotPrioritas(kodeB);
 
-            if (statusA === "T" && statusB === "H") return -1;
-            if (statusA === "H" && statusB === "T") return 1;
+        // Jika bobot prioritas berbeda, urutkan berdasarkan bobot terkecil
+        if (bobotA !== bobotB) {
+            return bobotA - bobotB;
         }
 
-        // 3. Pengurutan abjad/numerik standar
+        // Jika bobotnya sama (Sama-sama Tetap, atau Sama-sama Honorer), urutkan secara alfabetis normal
         return kodeA.localeCompare(kodeB);
     });
 
