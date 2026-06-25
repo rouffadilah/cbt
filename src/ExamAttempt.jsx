@@ -292,15 +292,17 @@ export default function ExamAttempt() {
                 if (dataPulih.jawabanSiswa) setJawabanSiswa(dataPulih.jawabanSiswa);
                 if (dataPulih.raguRagu) setRaguRagu(dataPulih.raguRagu);
             }
-           // Sinkronisasi hak istimewa sebelum workspace ujian diaktifkan
-            const storedRole = localStorage.getItem("userRole") || "";
-            const isStaffUser = storedRole.includes("admin") || storedRole.includes("guru") || student?.role?.includes("admin") || student?.role?.includes("guru");
+           // SINKRONISASI HAK ISTIMEWA SEBELUM MASUK UJIAN
+            const roleLocal = (localStorage.getItem("userRole") || "").toLowerCase();
+            const roleDb = (currentStudentData?.role || []).join(",").toLowerCase();
+            const isStaffUser = roleLocal.includes("admin") || roleLocal.includes("guru") || 
+                                roleDb.includes("admin") || roleDb.includes("guru");
 
             if (isStaffUser) {
                 if (testMode === 'simulate_student') {
-                    isPrivilegedRef.current = false; // Sistem akan mendeteksi Anda sebagai siswa (keamanan aktif)
+                    isPrivilegedRef.current = false; // Matikan hak istimewa (akan terdeteksi melanggar jika buka tab)
                 } else {
-                    isPrivilegedRef.current = true;  // Anda bebas melakukan split-screen/membuka tab baru
+                    isPrivilegedRef.current = true;  // Anda bebas memantau soal tanpa takut ditendang sistem
                 }
             }
 
@@ -409,6 +411,12 @@ export default function ExamAttempt() {
 
     // --- RENDER PORTAL SEBELUM UJIAN ---
     if (!isExamActive) {
+        // DETEKSI ROLE SUPER KETAT (Bypass Case Sensitive & Null)
+        const roleLocal = (localStorage.getItem("userRole") || "").toLowerCase();
+        const roleDb = (student?.role || []).join(",").toLowerCase();
+        const isStaff = roleLocal.includes("admin") || roleLocal.includes("guru") || 
+                        roleDb.includes("admin") || roleDb.includes("guru");
+
         return (
             <div className="pre-exam-container" style={{ position: 'relative' }}>
                 <button className="btn-attempt-dark-mode" onClick={() => setIsDarkMode(!isDarkMode)} style={{ position: 'absolute', top: 15, right: 15, background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--secondary)' }}>
@@ -427,7 +435,7 @@ export default function ExamAttempt() {
 
                         <div className="warning-box" style={{ padding: '12px 15px', fontSize: '0.8rem', textAlign: 'left', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af', borderRadius: 8 }}>
                             <div style={{ fontWeight: 700, marginBottom: 4 }}><i className="fas fa-shield-alt"></i> Pengawasan Aktif</div>
-                            Keluar dari layar penuh atau membuka tab lain akan otomatis memicu pelanggaran sistem.
+                            Keluar dari layar penuh atau membuka tab lain otomatis memicu pelanggaran sistem.
                         </div>
 
                         <div style={{ margin: '15px 0' }}>
@@ -447,41 +455,32 @@ export default function ExamAttempt() {
                                 {listMapel.map(m => <option key={m} value={m}>{m}</option>)}
                             </select>
                         </div>
-                        
+
                         {showTokenField && (
                             <div className="input-group" style={{ marginBottom: 25 }}>
                                 <input type="text" className="input-text" placeholder="TOKEN UJIAN" value={tokenInput} onChange={(e) => setTokenInput(e.target.value.toUpperCase())} style={{ textTransform: 'uppercase', fontSize: '1.15rem', fontWeight: 800, letterSpacing: 4, textAlign: 'center', color: 'var(--danger)' }} />
                             </div>
                         )}
 
-                        {/* FITUR PENGUJIAN: VALIDASI KETAT GURU / ADMIN */}
-                        {(() => {
-                            const storedRole = localStorage.getItem("userRole") || "";
-                            const isStaff = storedRole.includes("admin") || 
-                                            storedRole.includes("guru") || 
-                                            student?.role?.includes("admin") || 
-                                            student?.role?.includes("guru");
-                                            
-                            if (isStaff) {
-                                return (
-                                    <div className="input-group" style={{ marginBottom: 20, background: '#eff6ff', padding: '15px', borderRadius: '8px', border: '1px solid #bfdbfe', textAlign: 'left' }}>
-                                        <label style={{display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#1e40af', marginBottom: 8}}>
-                                            <i className="fas fa-user-shield"></i> Mode Akses (Khusus Guru/Admin)
-                                        </label>
-                                        <select 
-                                            className="input-text" 
-                                            value={testMode} 
-                                            onChange={(e) => setTestMode(e.target.value)}
-                                            style={{ background: 'white', color: '#1e40af', fontWeight: 'bold' }}
-                                        >
-                                            <option value="preview">Hanya Tinjau Soal (Bypass Sistem Keamanan)</option>
-                                            <option value="simulate_student">Simulasi Siswa (Uji Proteksi Penuh & Fullscreen)</option>
-                                        </select>
-                                    </div>
-                                );
-                            }
-                            return null;
-                        })()}
+                        {/* ============================================== */}
+                        {/* FITUR MODE PENGUJIAN (HANYA MUNCUL JIKA STAFF) */}
+                        {/* ============================================== */}
+                        {isStaff && (
+                            <div className="input-group" style={{ marginBottom: 25, background: '#eff6ff', padding: '15px', borderRadius: '8px', border: '1px solid #bfdbfe', textAlign: 'left' }}>
+                                <label style={{display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#1e40af', marginBottom: 10}}>
+                                    <i className="fas fa-user-shield"></i> Mode Uji Coba (Khusus Guru)
+                                </label>
+                                <select 
+                                    className="input-text" 
+                                    value={testMode} 
+                                    onChange={(e) => setTestMode(e.target.value)}
+                                    style={{ background: 'white', color: '#1e40af', fontWeight: 'bold', width: '100%' }}
+                                >
+                                    <option value="preview">Hanya Tinjau Soal (Bypass Keamanan)</option>
+                                    <option value="simulate_student">Simulasi Siswa (Keamanan Ketat)</option>
+                                </select>
+                            </div>
+                        )}
 
                         <div style={{ display: 'flex', justifyContent: 'center', gap: 15, marginTop: 10 }}>
                             <button onClick={handleKeluarPortal} className="btn-exit-modern" style={{ padding: '10px 20px', minWidth: 120, justifyContent: 'center' }}>Keluar</button>
