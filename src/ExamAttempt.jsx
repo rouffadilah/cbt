@@ -34,6 +34,9 @@ export default function ExamAttempt() {
     const maxPelanggaran = 3;
     const timerIntervalRef = useRef(null);
     const isPrivilegedRef = useRef(false);
+
+    const [testMode, setTestMode] = useState('preview'); 
+    const originalPrivilegeRef = useRef(false); // Menyimpan role asli untuk jaga-jaga
     
     // Pengunci loop alert saat jendela kehilangan fokus
     const isAlertShowingRef = useRef(false); 
@@ -62,7 +65,11 @@ export default function ExamAttempt() {
                 if (userDoc.exists()) {
                     const userData = userDoc.data();
                     const roles = userData.role || [];
-                    isPrivilegedRef.current = roles.includes('admin') || roles.includes('guru');
+                    
+                    const isStaff = roles.includes('admin') || roles.includes('guru');
+                    isPrivilegedRef.current = isStaff;
+                    originalPrivilegeRef.current = isStaff; // Tambahkan baris ini
+                    
                     setStudent({ uid: user.uid, ...userData });
                     setInputNama(userData.nama || user.displayName || '');
                 } else navigate('/dashboard');
@@ -70,7 +77,7 @@ export default function ExamAttempt() {
         });
         return () => unsubscribe();
     }, [navigate]);
-
+    
     useEffect(() => {
         const loadAkademik = async () => {
             try {
@@ -285,7 +292,14 @@ export default function ExamAttempt() {
                 if (dataPulih.jawabanSiswa) setJawabanSiswa(dataPulih.jawabanSiswa);
                 if (dataPulih.raguRagu) setRaguRagu(dataPulih.raguRagu);
             }
-
+            // LOGIKA PENGUJIAN GURU/ADMIN
+            if (originalPrivilegeRef.current) {
+                if (testMode === 'simulate_student') {
+                    isPrivilegedRef.current = false; // Matikan hak istimewa agar kena blokir sistem seperti siswa
+                } else {
+                    isPrivilegedRef.current = true; // Biarkan hak istimewa aktif untuk sekadar tinjau soal
+                }
+            }
             setArraySoal(listSoalLoaded); setIsExamActive(true); jalankanTimerCountdown();
         } catch (e) { keluarFullscreen(); alert(e.message); } finally { setLoading(false); }
     };
@@ -434,6 +448,24 @@ export default function ExamAttempt() {
                             </div>
                         )}
 
+                        {/* Tambahkan blok ini tepat di bawah div Token dan di atas deretan tombol Keluar/Mulai */}
+                        {originalPrivilegeRef.current && (
+                            <div className="input-group" style={{ marginBottom: 25, background: '#eff6ff', padding: '15px', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
+                                <label style={{display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#1e40af', marginBottom: 8}}>
+                                    <i className="fas fa-user-shield"></i> Mode Pengujian (Khusus Guru/Admin)
+                                </label>
+                                <select 
+                                    className="input-text" 
+                                    value={testMode} 
+                                    onChange={(e) => setTestMode(e.target.value)}
+                                    style={{ background: 'white', color: '#1e40af', fontWeight: 'bold' }}
+                                >
+                                    <option value="preview">Hanya Tinjau Soal (Bypass Keamanan)</option>
+                                    <option value="simulate_student">Simulasi Siswa (Uji Keamanan Penuh)</option>
+                                </select>
+                            </div>
+                        )}
+                        
                         <div style={{ display: 'flex', justifyContent: 'center', gap: 15, marginTop: 10 }}>
                             <button onClick={handleKeluarPortal} className="btn-exit-modern" style={{ padding: '10px 20px', minWidth: 120, justifyContent: 'center' }}>Keluar</button>
                             <button onClick={handleMulaiUjian} className="btn-3d" style={{ padding: '10px 20px', minWidth: 120, margin: 0 }} disabled={loading}>
